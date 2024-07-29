@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  bench:
+    runs-on:
+      group: Default
+      labels: Linux-ARM64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: 'aarch64-unknown-linux-gnu'
+        env:
+          CARGO_INCREMENTAL: '1'
+      - name: Run benchmarks
+        run: cargo bench
