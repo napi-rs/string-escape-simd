@@ -18,7 +18,7 @@ const __: u8 = 0;
 
 // Lookup table of escape sequences. A value of b'x' at index i means that byte
 // i is escaped as "\x" in JSON. A value of 0 means that byte i is not escaped.
-pub(crate) static ESCAPE: [u8; 256] = [
+pub(crate) const ESCAPE: [u8; 256] = [
     //   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
     UU, UU, UU, UU, UU, UU, UU, UU, BB, TT, NN, UU, FF, RR, UU, UU, // 0
     UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, UU, // 1
@@ -37,6 +37,8 @@ pub(crate) static ESCAPE: [u8; 256] = [
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
+
+pub(crate) const REVERSE_SOLIDUS: &[u8; 2] = b"\\\\";
 
 /// Represents a character escape code in a type-safe manner.
 #[repr(u8)]
@@ -74,7 +76,7 @@ impl CharEscape {
             self::QU => CharEscape::Quote,
             self::BS => CharEscape::ReverseSolidus,
             self::UU => CharEscape::AsciiControl(byte),
-            _ => unreachable!(),
+            _ => unreachable!("Invalid escape code: {}", escape),
         }
     }
 }
@@ -93,7 +95,7 @@ macro_rules! tri {
 
 #[cfg_attr(target_arch = "aarch64", allow(unused))]
 #[inline]
-fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
+pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
     let mut output = String::with_capacity(input.as_ref().len() + 2);
     let writer = unsafe { output.as_mut_vec() };
     writer.push(b'"');
@@ -139,7 +141,7 @@ fn write_char_escape(writer: &mut Vec<u8>, char_escape: CharEscape) {
 
     let s = match char_escape {
         Quote => b"\\\"",
-        ReverseSolidus => b"\\\\",
+        ReverseSolidus => REVERSE_SOLIDUS,
         Solidus => b"\\/",
         Backspace => b"\\b",
         FormFeed => b"\\f",
@@ -193,27 +195,4 @@ fn test_escape_json_string() {
         "fixture: {:?}",
         fixture
     );
-}
-
-#[cfg(all(test, feature = "nightly"))]
-mod bench {
-    extern crate test;
-
-    use test::Bencher;
-
-    const FIXTURE: &str = include_str!("../cal.com.tsx");
-
-    #[bench]
-    fn bench_simd_encode(b: &mut Bencher) {
-        b.iter(|| {
-            super::encode_str(FIXTURE);
-        });
-    }
-
-    #[bench]
-    fn bench_encode(b: &mut Bencher) {
-        b.iter(|| {
-            super::encode_str_fallback(FIXTURE);
-        });
-    }
 }

@@ -7,11 +7,25 @@ edition = "2021"
 nightly = [] # For benchmark
 default = []
 
+[[example]]
+name = "escape"
+path = "examples/escape.rs"
+
+[[bench]]
+name = "escape"
+harness = false
+
 [dependencies]
 anyhow = "1"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 serde_json = "1"
 
 [profile.bench]
 lto = true
+
+[profile.instruments]
+inherits = "release"
+lto = false
+debug = true
