@@ -1,11 +1,10 @@
-#![cfg_attr(feature = "nightly", feature(portable_simd))]
 #![cfg_attr(feature = "nightly", feature(test))]
 
-#[cfg(feature = "nightly")]
-pub use nightly::encode_str;
+#[cfg(target_arch = "aarch64")]
+pub use aarch64::encode_str;
 
-#[cfg(feature = "nightly")]
-mod nightly;
+#[cfg(target_arch = "aarch64")]
+mod aarch64;
 
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
@@ -92,18 +91,24 @@ macro_rules! tri {
     };
 }
 
-#[cfg(not(feature = "nightly"))]
-pub fn encode_str<S: AsRef<str>>(input: S, writer: &mut String) {
-    let writer = unsafe { writer.as_mut_vec() };
+#[cfg_attr(target_arch = "aarch64", allow(unused))]
+#[inline]
+fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
+    let mut output = String::with_capacity(input.as_ref().len() + 2);
+    let writer = unsafe { output.as_mut_vec() };
     writer.push(b'"');
-    encode_str_inner(input, writer);
+    encode_str_inner(input.as_ref().as_bytes(), writer);
     writer.push(b'"');
+    output
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+pub fn encode_str<S: AsRef<str>>(input: S) -> String {
+    encode_str_fallback(input)
 }
 
 #[inline]
-pub(crate) fn encode_str_inner<S: AsRef<str>>(input: S, writer: &mut Vec<u8>) {
-    let input = input.as_ref();
-    let bytes = input.as_bytes();
+pub(crate) fn encode_str_inner(bytes: &[u8], writer: &mut Vec<u8>) {
     let mut start = 0;
     for (i, &byte) in bytes.iter().enumerate() {
         let escape = ESCAPE[byte as usize];
@@ -112,7 +117,7 @@ pub(crate) fn encode_str_inner<S: AsRef<str>>(input: S, writer: &mut Vec<u8>) {
         }
 
         if start < i {
-            writer.extend_from_slice(&input.as_bytes()[start..i]);
+            writer.extend_from_slice(&bytes[start..i]);
         }
 
         let char_escape = CharEscape::from_escape_table(escape, byte);
@@ -124,7 +129,7 @@ pub(crate) fn encode_str_inner<S: AsRef<str>>(input: S, writer: &mut Vec<u8>) {
     if start == bytes.len() {
         return;
     }
-    writer.extend_from_slice(&input.as_bytes()[start..]);
+    writer.extend_from_slice(&bytes[start..]);
 }
 
 /// Writes a character escape code to the specified writer.
@@ -161,9 +166,7 @@ fn write_char_escape(writer: &mut Vec<u8>, char_escape: CharEscape) {
 #[test]
 fn test_escape_ascii_json_string() {
     let fixture = r#"abcdefghijklmnopqrstuvwxyz .*? hello world escape json string"#;
-    let mut buf = String::new();
-    encode_str(fixture, &mut buf);
-    assert_eq!(buf, serde_json::to_string(fixture).unwrap());
+    assert_eq!(encode_str(fixture), serde_json::to_string(fixture).unwrap());
 }
 
 #[test]
@@ -183,10 +186,9 @@ fn test_escape_json_string() {
     fixture.push_str("normal string");
     fixture.push('😊');
     fixture.push_str("中文 English 🚀 \n❓ 𝄞");
-    let mut buf = String::new();
-    encode_str(fixture.as_str(), &mut buf);
+    encode_str(fixture.as_str());
     assert_eq!(
-        buf,
+        encode_str(fixture.as_str()),
         serde_json::to_string(fixture.as_str()).unwrap(),
         "fixture: {:?}",
         fixture
@@ -197,8 +199,6 @@ fn test_escape_json_string() {
 mod bench {
     extern crate test;
 
-    use std::hint::black_box;
-
     use test::Bencher;
 
     const FIXTURE: &str = include_str!("../cal.com.tsx");
@@ -206,21 +206,14 @@ mod bench {
     #[bench]
     fn bench_simd_encode(b: &mut Bencher) {
         b.iter(|| {
-            let mut buf = String::new();
-            black_box(super::encode_str(FIXTURE, &mut buf));
-            buf
+            super::encode_str(FIXTURE);
         });
     }
 
     #[bench]
     fn bench_encode(b: &mut Bencher) {
         b.iter(|| {
-            let mut buf = String::new();
-            let writer = unsafe { buf.as_mut_vec() };
-            writer.push(b'"');
-            black_box(super::encode_str_inner(FIXTURE, writer));
-            writer.push(b'"');
-            buf
+            super::encode_str_fallback(FIXTURE);
         });
     }
 }
