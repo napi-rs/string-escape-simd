@@ -6,6 +6,12 @@ pub use aarch64::encode_str;
 #[cfg(target_arch = "aarch64")]
 mod aarch64;
 
+#[cfg(target_arch = "x86_64")]
+mod x86_64;
+
+#[cfg(target_arch = "x86_64")]
+pub use x86_64::encode_str;
+
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
 const NN: u8 = b'n'; // \x0A
@@ -104,7 +110,7 @@ pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
     output
 }
 
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(all(not(target_arch = "aarch64"), not(target_arch = "x86_64")))]
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     encode_str_fallback(input)
 }
@@ -195,4 +201,11 @@ fn test_escape_json_string() {
         "fixture: {:?}",
         fixture
     );
+}
+
+
+#[test]
+fn test() {
+    let x = ESCAPE[b'\\' as usize];
+    println!("{x}")
 }
