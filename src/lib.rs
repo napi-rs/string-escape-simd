@@ -202,10 +202,3 @@ fn test_escape_json_string() {
         fixture
     );
 }
-
-
-#[test]
-fn test() {
-    let x = ESCAPE[b'\\' as usize];
-    println!("{x}")
-}
