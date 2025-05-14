@@ -20,3 +20,5 @@ jobs:
           CARGO_INCREMENTAL: '1'
       - name: Run benchmarks
         run: cargo bench
+        env:
+          RUSTFLAGS: '-C target-cpu=native'
