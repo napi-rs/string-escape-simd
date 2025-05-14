@@ -22,8 +22,8 @@ pub fn encode_str<S: AsRef<str>>(input: S) -> String {
         while i + CHUNK <= n {
             let ptr = b.as_ptr().add(i);
 
-            /* ---- L1 prefetch: one cache line ahead ---- */
-            core::arch::asm!("prfm pldl1keep, [{0}, #128]", in(reg) ptr);
+            /* ---- L1 prefetch: CHUNK size ahead ---- */
+            core::arch::asm!("prfm pldl1keep, [{0}, #64]", in(reg) ptr);
             /* ------------------------------------------ */
 
             // load 64 B (four q-regs)
