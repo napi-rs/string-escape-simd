@@ -24,6 +24,7 @@ serde_json = "1"
 
 [profile.bench]
 lto = true
+codegen-units = 1
 
 [profile.instruments]
 inherits = "release"
