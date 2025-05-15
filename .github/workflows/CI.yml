@@ -21,4 +21,4 @@ jobs:
       - name: Run benchmarks
         run: cargo bench
         env:
-          RUSTFLAGS: '-C target-cpu=native'
+          RUSTFLAGS: '-C target-cpu=neoverse-n2 -C target-feature=+sve2,+ls64'
