@@ -18,6 +18,8 @@ jobs:
           targets: 'aarch64-unknown-linux-gnu'
         env:
           CARGO_INCREMENTAL: '1'
+      - name: Print rustc target cpus
+        run: rustc --print=target-cpus
       - name: Run benchmarks
         run: cargo bench
         env:
