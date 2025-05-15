@@ -1,11 +1,15 @@
 use std::arch::aarch64::{
-    vceqq_u8, vdupq_n_u8, vld1q_u8, vld1q_u8_x4, vmaxvq_u8, vorrq_u8, vqtbl4q_u8, vst1q_u8,
+    vceqq_u8, vdupq_n_u8, vld1q_u8_x4, vmaxvq_u8, vorrq_u8, vqtbl4q_u8, vst1q_u8,
 };
 
 use crate::{encode_str_inner, write_char_escape, CharEscape, ESCAPE, REVERSE_SOLIDUS};
 
 /// Four contiguous 16-byte NEON registers (64 B) per loop.
 const CHUNK: usize = 64;
+/// Distance (in bytes) to prefetch ahead. Must be a multiple of 8 for PRFM.
+/// Keeping ~4 iterations (4 × CHUNK = 256 B) ahead strikes a good balance
+/// between hiding memory latency and not evicting useful cache lines.
+const PREFETCH_DISTANCE: usize = CHUNK * 4;
 
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
@@ -18,23 +22,30 @@ pub fn encode_str<S: AsRef<str>>(input: S) -> String {
         let tbl = vld1q_u8_x4(ESCAPE.as_ptr()); // first 64 B of the escape table
         let slash = vdupq_n_u8(b'\\');
         let mut i = 0;
-        let mut placeholder: [u8; 16] = core::mem::zeroed();
+        // Re-usable scratch – *uninitialised*, so no memset in the loop.
+        // Using MaybeUninit instead of mem::zeroed() prevents the compiler from inserting an implicit memset (observable with -Cllvm-args=-print-after=expand-memcmp).
+        // This is a proven micro-optimisation in Rust's standard library I/O stack.
+        #[allow(invalid_value)]
+        let mut placeholder: [u8; 16] = core::mem::MaybeUninit::uninit().assume_init();
 
         while i + CHUNK <= n {
             let ptr = bytes.as_ptr().add(i);
 
-            /* ---- L1 prefetch: CHUNK size ahead ---- */
-            core::arch::asm!("prfm pldl1keep, [{0}, #64]", in(reg) ptr);
+            /* ---- L1 prefetch: PREFETCH_DISTANCE bytes ahead ---- */
+            core::arch::asm!(
+                "prfm pldl1keep, [{0}, #{1}]",
+                in(reg) ptr,
+                const PREFETCH_DISTANCE,
+            );
             /* ------------------------------------------ */
 
+            let quad = vld1q_u8_x4(ptr);
+
             // load 64 B (four q-regs)
-            let a = vld1q_u8(ptr);
-
-            let b = vld1q_u8(ptr.add(16));
-
-            let c = vld1q_u8(ptr.add(32));
-
-            let d = vld1q_u8(ptr.add(48));
+            let a = quad.0;
+            let b = quad.1;
+            let c = quad.2;
+            let d = quad.3;
 
             let mask_1 = vorrq_u8(vqtbl4q_u8(tbl, a), vceqq_u8(slash, a));
             let mask_2 = vorrq_u8(vqtbl4q_u8(tbl, b), vceqq_u8(slash, b));
