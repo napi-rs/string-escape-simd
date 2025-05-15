@@ -10,17 +10,18 @@ const CHUNK: usize = 64;
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let mut out = Vec::with_capacity(s.len() + 2);
-    let b = s.as_bytes();
-    let n = b.len();
+    let bytes = s.as_bytes();
+    let n = bytes.len();
     out.push(b'"');
 
     unsafe {
         let tbl = vld1q_u8_x4(ESCAPE.as_ptr()); // first 64 B of the escape table
         let slash = vdupq_n_u8(b'\\');
         let mut i = 0;
+        let mut placeholder: [u8; 16] = core::mem::zeroed();
 
         while i + CHUNK <= n {
-            let ptr = b.as_ptr().add(i);
+            let ptr = bytes.as_ptr().add(i);
 
             /* ---- L1 prefetch: CHUNK size ahead ---- */
             core::arch::asm!("prfm pldl1keep, [{0}, #64]", in(reg) ptr);
@@ -28,25 +29,17 @@ pub fn encode_str<S: AsRef<str>>(input: S) -> String {
 
             // load 64 B (four q-regs)
             let a = vld1q_u8(ptr);
-            let m1 = vqtbl4q_u8(tbl, a);
-            let m2 = vceqq_u8(slash, a);
 
-            let b2 = vld1q_u8(ptr.add(16));
-            let m3 = vqtbl4q_u8(tbl, b2);
-            let m4 = vceqq_u8(slash, b2);
+            let b = vld1q_u8(ptr.add(16));
 
             let c = vld1q_u8(ptr.add(32));
-            let m5 = vqtbl4q_u8(tbl, c);
-            let m6 = vceqq_u8(slash, c);
 
             let d = vld1q_u8(ptr.add(48));
-            let m7 = vqtbl4q_u8(tbl, d);
-            let m8 = vceqq_u8(slash, d);
 
-            let mask_1 = vorrq_u8(m1, m2);
-            let mask_2 = vorrq_u8(m3, m4);
-            let mask_3 = vorrq_u8(m5, m6);
-            let mask_4 = vorrq_u8(m7, m8);
+            let mask_1 = vorrq_u8(vqtbl4q_u8(tbl, a), vceqq_u8(slash, a));
+            let mask_2 = vorrq_u8(vqtbl4q_u8(tbl, b), vceqq_u8(slash, b));
+            let mask_3 = vorrq_u8(vqtbl4q_u8(tbl, c), vceqq_u8(slash, c));
+            let mask_4 = vorrq_u8(vqtbl4q_u8(tbl, d), vceqq_u8(slash, d));
 
             let mask_r_1 = vmaxvq_u8(mask_1);
             let mask_r_2 = vmaxvq_u8(mask_2);
@@ -59,40 +52,27 @@ pub fn encode_str<S: AsRef<str>>(input: S) -> String {
                 i += CHUNK;
                 continue;
             }
-            let mut tmp: [u8; 16] = core::mem::zeroed();
 
-            if mask_r_1 == 0 {
-                out.extend_from_slice(std::slice::from_raw_parts(ptr, 16));
-            } else {
-                vst1q_u8(tmp.as_mut_ptr(), mask_1);
-                handle_block(&b[i..i + 16], &tmp, &mut out);
+            macro_rules! handle {
+                ($mask:expr, $mask_r:expr, $off:expr) => {
+                    if $mask_r == 0 {
+                        out.extend_from_slice(std::slice::from_raw_parts(ptr.add($off), 16));
+                    } else {
+                        vst1q_u8(placeholder.as_mut_ptr(), $mask);
+                        handle_block(&bytes[i + $off..i + $off + 16], &placeholder, &mut out);
+                    }
+                };
             }
 
-            if mask_r_2 == 0 {
-                out.extend_from_slice(std::slice::from_raw_parts(ptr.add(16), 16));
-            } else {
-                vst1q_u8(tmp.as_mut_ptr(), mask_2);
-                handle_block(&b[i + 16..i + 32], &tmp, &mut out);
-            }
-
-            if mask_r_3 == 0 {
-                out.extend_from_slice(std::slice::from_raw_parts(ptr.add(32), 16));
-            } else {
-                vst1q_u8(tmp.as_mut_ptr(), mask_3);
-                handle_block(&b[i + 32..i + 48], &tmp, &mut out);
-            }
-
-            if mask_r_4 == 0 {
-                out.extend_from_slice(std::slice::from_raw_parts(ptr.add(48), 16));
-            } else {
-                vst1q_u8(tmp.as_mut_ptr(), mask_4);
-                handle_block(&b[i + 48..i + 64], &tmp, &mut out);
-            }
+            handle!(mask_1, mask_r_1, 0);
+            handle!(mask_2, mask_r_2, 16);
+            handle!(mask_3, mask_r_3, 32);
+            handle!(mask_4, mask_r_4, 48);
 
             i += CHUNK;
         }
         if i < n {
-            encode_str_inner(&b[i..], &mut out);
+            encode_str_inner(&bytes[i..], &mut out);
         }
     }
     out.push(b'"');
