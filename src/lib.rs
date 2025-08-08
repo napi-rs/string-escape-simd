@@ -196,3 +196,29 @@ fn test_escape_json_string() {
         fixture
     );
 }
+
+#[test]
+fn test_v8_optimizations_large_string() {
+    // Test with a string large enough to trigger SIMD processing
+    let large_clean = "a".repeat(1000);
+    assert_eq!(encode_str(&large_clean), serde_json::to_string(&large_clean).unwrap());
+    
+    // Test with a large string that has some escapes
+    let mut large_mixed = "normal text ".repeat(50);
+    large_mixed.push_str("\"quoted\"");
+    large_mixed.push_str(&"more normal text ".repeat(50));
+    assert_eq!(encode_str(&large_mixed), serde_json::to_string(&large_mixed).unwrap());
+}
+
+#[test] 
+fn test_v8_edge_cases() {
+    // Test boundary conditions
+    assert_eq!(encode_str(""), r#""""#);
+    assert_eq!(encode_str("\""), r#""\"""#);
+    assert_eq!(encode_str("\\"), r#""\\""#);
+    assert_eq!(encode_str("\n"), r#""\n""#);
+    
+    // Test mixed escape patterns
+    let mixed = "normal\"text\\with\nescapes";
+    assert_eq!(encode_str(mixed), serde_json::to_string(mixed).unwrap());
+}
