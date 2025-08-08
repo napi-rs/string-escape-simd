@@ -18,7 +18,38 @@ jobs:
           targets: 'aarch64-unknown-linux-gnu'
         env:
           CARGO_INCREMENTAL: '1'
-      - name: Run benchmarks
-        run: cargo bench
+      - name: Install hyperfine
+        run: |
+          curl -L https://github.com/sharkdp/hyperfine/releases/download/v1.18.0/hyperfine-v1.18.0-aarch64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv hyperfine-v1.18.0-aarch64-unknown-linux-gnu/hyperfine /usr/local/bin/
+      - name: Clone AFFiNE v0.23.2 for benchmark data
+        run: |
+          mkdir -p /tmp/affine && cd /tmp/affine
+          curl -L "https://github.com/toeverything/AFFiNE/archive/refs/tags/v0.23.2.tar.gz" -o affine-v0.23.2.tar.gz
+          tar -xzf affine-v0.23.2.tar.gz
+      - name: Collect benchmark data
+        run: |
+          mkdir -p benchmark_data
+          find /tmp/affine/AFFiNE-0.23.2 -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -type f | \
+            while IFS= read -r file; do
+              echo "// File: $file" >> benchmark_data/all_files.js
+              cat "$file" >> benchmark_data/all_files.js
+              echo -e "\n\n" >> benchmark_data/all_files.js
+            done
+          find /tmp/affine/AFFiNE-0.23.2 -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -type f > benchmark_data/file_list.txt
+          echo "Collected $(wc -l < benchmark_data/file_list.txt) files ($(wc -c < benchmark_data/all_files.js) bytes)"
+      - name: Build benchmark binary
+        run: cargo build --release --bin affine_bench
+        env:
+          RUSTFLAGS: '-C target-cpu=native'
+      - name: Run real-world benchmarks
+        run: |
+          echo "=== Quick Comparison ==="
+          ./target/release/affine_bench compare
+          echo ""
+          echo "=== Hyperfine Benchmark ==="
+          hyperfine --warmup 3 --runs 10 \
+            --command-name "SIMD implementation" "./target/release/affine_bench hyperfine simd" \
+            --command-name "Fallback implementation" "./target/release/affine_bench hyperfine fallback"
         env:
           RUSTFLAGS: '-C target-cpu=native'
