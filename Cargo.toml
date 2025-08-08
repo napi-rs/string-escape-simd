@@ -7,6 +7,10 @@ edition = "2021"
 nightly = [] # For benchmark
 default = []
 
+[[bin]]
+name = "affine_bench"
+path = "src/bin/affine_bench.rs"
+
 [[example]]
 name = "escape"
 path = "examples/escape.rs"

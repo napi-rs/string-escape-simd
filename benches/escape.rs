@@ -1,3 +1,6 @@
+// Legacy criterion benchmark - superseded by real-world AFFiNE benchmark
+// Use `./benchmark.sh` or `cargo run --bin affine_bench` for comprehensive testing
+
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
