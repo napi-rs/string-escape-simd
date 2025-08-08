@@ -11,6 +11,10 @@ default = []
 name = "escape"
 path = "examples/escape.rs"
 
+[[example]]
+name = "v8_demo"
+path = "examples/v8_demo.rs"
+
 [[bench]]
 name = "escape"
 harness = false
