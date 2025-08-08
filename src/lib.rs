@@ -96,12 +96,13 @@ macro_rules! tri {
 #[cfg_attr(target_arch = "aarch64", allow(unused))]
 #[inline]
 pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
-    let mut output = String::with_capacity(input.as_ref().len() + 2);
-    let writer = unsafe { output.as_mut_vec() };
-    writer.push(b'"');
-    encode_str_inner(input.as_ref().as_bytes(), writer);
-    writer.push(b'"');
-    output
+    let s = input.as_ref();
+    let mut escaped_buf = Vec::with_capacity(s.len() * 2 + 2);
+    // This call is infallible as only error it can return is if the writer errors.
+    // Writing to a `Vec<u8>` is infallible, so that's not possible here.
+    serde::Serialize::serialize(s, &mut serde_json::Serializer::new(&mut escaped_buf)).unwrap();
+    // Safety: `escaped_buf` is valid utf8.
+    unsafe { String::from_utf8_unchecked(escaped_buf) }
 }
 
 #[cfg(not(target_arch = "aarch64"))]
