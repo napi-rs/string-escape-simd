@@ -9,7 +9,7 @@ const CHUNK: usize = 64;
 /// Distance (in bytes) to prefetch ahead. Must be a multiple of 8 for PRFM.
 /// Keeping ~4 iterations (4 × CHUNK = 256 B) ahead strikes a good balance
 /// between hiding memory latency and not evicting useful cache lines.
-const PREFETCH_DISTANCE: usize = CHUNK * 4;
+const PREFETCH_DISTANCE: usize = CHUNK * 8;
 
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
