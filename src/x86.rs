@@ -1,6 +1,8 @@
 use std::arch::x86_64::{
-    __m128i, __m256i, _mm256_add_epi8, _mm256_cmpeq_epi8, _mm256_cmpgt_epi8, _mm256_load_si256,
+    __m128i, __m256i, __m512i, _mm256_add_epi8, _mm256_cmpeq_epi8, _mm256_cmpgt_epi8, _mm256_load_si256,
     _mm256_loadu_si256, _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8,
+    _mm512_add_epi8, _mm512_cmpeq_epi8_mask, _mm512_cmpgt_epi8_mask, _mm512_load_si512,
+    _mm512_loadu_si512, _mm512_set1_epi8,
     _mm_add_epi8, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_load_si128, _mm_loadu_si128,
     _mm_movemask_epi8, _mm_or_si128, _mm_prefetch, _mm_set1_epi8, _MM_HINT_T0,
 };
@@ -13,15 +15,223 @@ const BELOW_A: i8 = i8::MAX - (31i8 - 0i8) - 1;
 const B: i8 = 34i8; // '"'
 const C: i8 = 92i8; // '\\'
 
+const M512_VECTOR_SIZE: usize = std::mem::size_of::<__m512i>();
 const M256_VECTOR_SIZE: usize = std::mem::size_of::<__m256i>();
 const M128_VECTOR_SIZE: usize = std::mem::size_of::<__m128i>();
-const LOOP_SIZE: usize = 4 * M256_VECTOR_SIZE; // Process 128 bytes at a time
+const LOOP_SIZE_AVX2: usize = 4 * M256_VECTOR_SIZE; // Process 128 bytes at a time
+const LOOP_SIZE_AVX512: usize = 4 * M512_VECTOR_SIZE; // Process 256 bytes at a time
 const PREFETCH_DISTANCE: usize = 256; // Prefetch 256 bytes ahead
 
 #[inline(always)]
 fn sub(a: *const u8, b: *const u8) -> usize {
     debug_assert!(b <= a);
     (a as usize) - (b as usize)
+}
+
+#[target_feature(enable = "avx512f", enable = "avx512bw")]
+pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
+    let s = input.as_ref();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+
+    // Pre-allocate with estimated capacity
+    let estimated_capacity = len + len / 2 + 2;
+    let mut result = Vec::with_capacity(estimated_capacity);
+
+    result.push(b'"');
+
+    let start_ptr = bytes.as_ptr();
+    let end_ptr = bytes[len..].as_ptr();
+    let mut ptr = start_ptr;
+    let mut start = 0;
+
+    if len >= M512_VECTOR_SIZE {
+        let v_translation_a = _mm512_set1_epi8(TRANSLATION_A);
+        let v_below_a = _mm512_set1_epi8(BELOW_A);
+        let v_b = _mm512_set1_epi8(B);
+        let v_c = _mm512_set1_epi8(C);
+
+        // Handle alignment - skip if already aligned
+        const M512_VECTOR_ALIGN: usize = M512_VECTOR_SIZE - 1;
+        let misalignment = start_ptr as usize & M512_VECTOR_ALIGN;
+        if misalignment != 0 {
+            let align = M512_VECTOR_SIZE - misalignment;
+            let a = _mm512_loadu_si512(ptr as *const __m512i);
+
+            // Check for quotes, backslash, and control characters
+            let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
+            let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
+            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+
+            let mut mask = (quote_mask | slash_mask | ctrl_mask) as u64;
+
+            if mask != 0 {
+                let at = sub(ptr, start_ptr);
+                let mut cur = mask.trailing_zeros() as usize;
+                while cur < align {
+                    let c = *ptr.add(cur);
+                    let escape_byte = ESCAPE[c as usize];
+                    if escape_byte != 0 {
+                        let i = at + cur;
+                        if start < i {
+                            result.extend_from_slice(&bytes[start..i]);
+                        }
+                        write_escape(&mut result, escape_byte, c);
+                        start = i + 1;
+                    }
+                    mask ^= 1 << cur;
+                    if mask == 0 {
+                        break;
+                    }
+                    cur = mask.trailing_zeros() as usize;
+                }
+            }
+            ptr = ptr.add(align);
+        }
+
+        // Main loop processing 256 bytes at a time
+        if LOOP_SIZE_AVX512 <= len {
+            while ptr <= end_ptr.sub(LOOP_SIZE_AVX512) {
+                debug_assert_eq!(0, (ptr as usize) % M512_VECTOR_SIZE);
+
+                // Prefetch next iteration's data
+                if ptr.add(LOOP_SIZE_AVX512 + PREFETCH_DISTANCE) < end_ptr {
+                    _mm_prefetch(ptr.add(LOOP_SIZE_AVX512 + PREFETCH_DISTANCE) as *const i8, _MM_HINT_T0);
+                }
+
+                // Load all 4 vectors at once for better pipelining
+                let a0 = _mm512_load_si512(ptr as *const __m512i);
+                let a1 = _mm512_load_si512(ptr.add(M512_VECTOR_SIZE) as *const __m512i);
+                let a2 = _mm512_load_si512(ptr.add(M512_VECTOR_SIZE * 2) as *const __m512i);
+                let a3 = _mm512_load_si512(ptr.add(M512_VECTOR_SIZE * 3) as *const __m512i);
+
+                // Check for quotes (") in all vectors
+                let quote_0 = _mm512_cmpeq_epi8_mask(a0, v_b);
+                let quote_1 = _mm512_cmpeq_epi8_mask(a1, v_b);
+                let quote_2 = _mm512_cmpeq_epi8_mask(a2, v_b);
+                let quote_3 = _mm512_cmpeq_epi8_mask(a3, v_b);
+
+                // Check for backslash (\) in all vectors
+                let slash_0 = _mm512_cmpeq_epi8_mask(a0, v_c);
+                let slash_1 = _mm512_cmpeq_epi8_mask(a1, v_c);
+                let slash_2 = _mm512_cmpeq_epi8_mask(a2, v_c);
+                let slash_3 = _mm512_cmpeq_epi8_mask(a3, v_c);
+
+                // Check for control characters (< 0x20) in all vectors
+                let ctrl_0 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a0, v_translation_a), v_below_a);
+                let ctrl_1 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a1, v_translation_a), v_below_a);
+                let ctrl_2 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a2, v_translation_a), v_below_a);
+                let ctrl_3 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a3, v_translation_a), v_below_a);
+
+                // Combine all masks
+                let mask_a = quote_0 | slash_0 | ctrl_0;
+                let mask_b = quote_1 | slash_1 | ctrl_1;
+                let mask_c = quote_2 | slash_2 | ctrl_2;
+                let mask_d = quote_3 | slash_3 | ctrl_3;
+
+                // Fast path: check if any escaping needed
+                let any_escape = mask_a | mask_b | mask_c | mask_d;
+
+                if any_escape == 0 {
+                    // No escapes needed, copy whole chunk
+                    if start < sub(ptr, start_ptr) {
+                        result.extend_from_slice(&bytes[start..sub(ptr, start_ptr)]);
+                    }
+                    result.extend_from_slice(std::slice::from_raw_parts(ptr, LOOP_SIZE_AVX512));
+                    start = sub(ptr, start_ptr) + LOOP_SIZE_AVX512;
+                } else {
+                    // Process each 64-byte chunk that has escapes
+                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_a, 0);
+                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_b, M512_VECTOR_SIZE);
+                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_c, M512_VECTOR_SIZE * 2);
+                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_d, M512_VECTOR_SIZE * 3);
+                }
+
+                ptr = ptr.add(LOOP_SIZE_AVX512);
+            }
+        }
+
+        // Process remaining aligned chunks
+        while ptr <= end_ptr.sub(M512_VECTOR_SIZE) {
+            debug_assert_eq!(0, (ptr as usize) % M512_VECTOR_SIZE);
+            let a = _mm512_load_si512(ptr as *const __m512i);
+
+            let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
+            let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
+            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+
+            let mut mask = (quote_mask | slash_mask | ctrl_mask) as u64;
+
+            if mask != 0 {
+                let at = sub(ptr, start_ptr);
+                let mut cur = mask.trailing_zeros() as usize;
+                loop {
+                    let c = *ptr.add(cur);
+                    let escape_byte = ESCAPE[c as usize];
+                    if escape_byte != 0 {
+                        let i = at + cur;
+                        if start < i {
+                            result.extend_from_slice(&bytes[start..i]);
+                        }
+                        write_escape(&mut result, escape_byte, c);
+                        start = i + 1;
+                    }
+                    mask ^= 1 << cur;
+                    if mask == 0 {
+                        break;
+                    }
+                    cur = mask.trailing_zeros() as usize;
+                }
+            }
+            ptr = ptr.add(M512_VECTOR_SIZE);
+        }
+
+        // Handle tail
+        if ptr < end_ptr {
+            let d = M512_VECTOR_SIZE - sub(end_ptr, ptr);
+            let a = _mm512_loadu_si512(ptr.sub(d) as *const __m512i);
+
+            let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
+            let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
+            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+
+            let mut mask = ((quote_mask | slash_mask | ctrl_mask) as u64)
+                .wrapping_shr(d as u32);
+
+            if mask != 0 {
+                let at = sub(ptr, start_ptr);
+                let mut cur = mask.trailing_zeros() as usize;
+                loop {
+                    let c = *ptr.add(cur);
+                    let escape_byte = ESCAPE[c as usize];
+                    if escape_byte != 0 {
+                        let i = at + cur;
+                        if start < i {
+                            result.extend_from_slice(&bytes[start..i]);
+                        }
+                        write_escape(&mut result, escape_byte, c);
+                        start = i + 1;
+                    }
+                    mask ^= 1 << cur;
+                    if mask == 0 {
+                        break;
+                    }
+                    cur = mask.trailing_zeros() as usize;
+                }
+            }
+        }
+    } else {
+        // Fall back to AVX2 for small strings
+        return encode_str_avx2(input);
+    }
+
+    // Copy any remaining bytes
+    if start < len {
+        result.extend_from_slice(&bytes[start..]);
+    }
+
+    result.push(b'"');
+    unsafe { String::from_utf8_unchecked(result) }
 }
 
 #[target_feature(enable = "avx2")]
@@ -85,13 +295,13 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
         }
 
         // Main loop processing 128 bytes at a time
-        if LOOP_SIZE <= len {
-            while ptr <= end_ptr.sub(LOOP_SIZE) {
+        if LOOP_SIZE_AVX2 <= len {
+            while ptr <= end_ptr.sub(LOOP_SIZE_AVX2) {
                 debug_assert_eq!(0, (ptr as usize) % M256_VECTOR_SIZE);
 
                 // Prefetch next iteration's data
-                if ptr.add(LOOP_SIZE + PREFETCH_DISTANCE) < end_ptr {
-                    _mm_prefetch(ptr.add(LOOP_SIZE + PREFETCH_DISTANCE) as *const i8, _MM_HINT_T0);
+                if ptr.add(LOOP_SIZE_AVX2 + PREFETCH_DISTANCE) < end_ptr {
+                    _mm_prefetch(ptr.add(LOOP_SIZE_AVX2 + PREFETCH_DISTANCE) as *const i8, _MM_HINT_T0);
                 }
 
                 // Load all 4 vectors at once for better pipelining
@@ -135,8 +345,8 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
                     if start < sub(ptr, start_ptr) {
                         result.extend_from_slice(&bytes[start..sub(ptr, start_ptr)]);
                     }
-                    result.extend_from_slice(std::slice::from_raw_parts(ptr, LOOP_SIZE));
-                    start = sub(ptr, start_ptr) + LOOP_SIZE;
+                    result.extend_from_slice(std::slice::from_raw_parts(ptr, LOOP_SIZE_AVX2));
+                    start = sub(ptr, start_ptr) + LOOP_SIZE_AVX2;
                 } else {
                     // Get individual masks only when needed
                     let mask_a = _mm256_movemask_epi8(cmp_a);
@@ -151,7 +361,7 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
                     process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_d, M256_VECTOR_SIZE * 3);
                 }
 
-                ptr = ptr.add(LOOP_SIZE);
+                ptr = ptr.add(LOOP_SIZE_AVX2);
             }
         }
 
@@ -412,6 +622,46 @@ unsafe fn process_mask_avx(
 
     // Process mask bits using bit manipulation
     let mut remaining = mask as u32;
+    while remaining != 0 {
+        let cur = remaining.trailing_zeros() as usize;
+        let c = *ptr.add(cur);
+        let escape_byte = ESCAPE[c as usize];
+
+        if escape_byte != 0 {
+            let i = at + cur;
+            // Copy unescaped portion if needed
+            if *start < i {
+                result.extend_from_slice(&bytes[*start..i]);
+            }
+            // Write escape sequence
+            write_escape(result, escape_byte, c);
+            *start = i + 1;
+        }
+
+        // Clear the lowest set bit
+        remaining &= remaining - 1;
+    }
+}
+
+#[inline(always)]
+unsafe fn process_mask_avx512(
+    ptr: *const u8,
+    start_ptr: *const u8,
+    result: &mut Vec<u8>,
+    start: &mut usize,
+    bytes: &[u8],
+    mask: u64,
+    offset: usize,
+) {
+    if mask == 0 {
+        return;
+    }
+
+    let ptr = ptr.add(offset);
+    let at = sub(ptr, start_ptr);
+
+    // Process mask bits using bit manipulation
+    let mut remaining = mask;
     while remaining != 0 {
         let cur = remaining.trailing_zeros() as usize;
         let c = *ptr.add(cur);

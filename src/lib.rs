@@ -137,7 +137,9 @@ pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     #[cfg(target_arch = "x86_64")]
     {
         // Runtime CPU feature detection for x86_64
-        if is_x86_feature_detected!("avx2") {
+        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
+            unsafe { return x86::encode_str_avx512(input) }
+        } else if is_x86_feature_detected!("avx2") {
             unsafe { return x86::encode_str_avx2(input) }
         } else if is_x86_feature_detected!("sse2") {
             unsafe { return x86::encode_str_sse2(input) }
