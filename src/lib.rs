@@ -1,10 +1,30 @@
 #![cfg_attr(feature = "nightly", feature(test))]
 
-#[cfg(target_arch = "aarch64")]
-pub use aarch64::encode_str;
+#[cfg(target_arch = "x86_64")]
+pub use x86_64::encode_str;
 
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
+#[cfg(target_arch = "x86_64")]
+mod avx2;
+
+#[cfg(target_arch = "x86_64")]
+mod x86_64 {
+    use super::*;
+
+    #[inline]
+    pub fn encode_str<S: AsRef<str>>(input: S) -> String {
+        // Runtime CPU feature detection for AVX2
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if is_x86_feature_detected!("avx2") {
+                // Safe to use AVX2 implementation
+                unsafe { return crate::avx2::encode_str(input) }
+            }
+        }
+
+        // Fallback to optimized non-SIMD implementation
+        crate::encode_str_fallback(input)
+    }
+}
 
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
@@ -38,48 +58,30 @@ pub(crate) const ESCAPE: [u8; 256] = [
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
-pub(crate) const REVERSE_SOLIDUS: &[u8; 2] = b"\\\\";
-
-/// Represents a character escape code in a type-safe manner.
-#[repr(u8)]
-pub enum CharEscape {
-    /// An escaped quote `"`
-    Quote,
-    /// An escaped reverse solidus `\`
-    ReverseSolidus,
-    /// An escaped solidus `/`
-    Solidus,
-    /// An escaped backspace character (usually escaped as `\b`)
-    Backspace,
-    /// An escaped form feed character (usually escaped as `\f`)
-    FormFeed,
-    /// An escaped line feed character (usually escaped as `\n`)
-    LineFeed,
-    /// An escaped carriage return character (usually escaped as `\r`)
-    CarriageReturn,
-    /// An escaped tab character (usually escaped as `\t`)
-    Tab,
-    /// An escaped ASCII plane control character (usually escaped as
-    /// `\u00XX` where `XX` are two hex characters)
-    AsciiControl(u8),
-}
-
-impl CharEscape {
-    #[inline]
-    fn from_escape_table(escape: u8, byte: u8) -> CharEscape {
-        match escape {
-            self::BB => CharEscape::Backspace,
-            self::TT => CharEscape::Tab,
-            self::NN => CharEscape::LineFeed,
-            self::FF => CharEscape::FormFeed,
-            self::RR => CharEscape::CarriageReturn,
-            self::QU => CharEscape::Quote,
-            self::BS => CharEscape::ReverseSolidus,
-            self::UU => CharEscape::AsciiControl(byte),
-            _ => unreachable!("Invalid escape code: {}", escape),
-        }
+// Precomputed hex byte pairs for faster control character escaping
+pub(crate) const HEX_BYTES: [(u8, u8); 256] = {
+    let mut bytes = [(0u8, 0u8); 256];
+    let mut i = 0;
+    while i < 256 {
+        let high = (i >> 4) as u8;
+        let low = (i & 0xF) as u8;
+        bytes[i] = (
+            if high < 10 {
+                b'0' + high
+            } else {
+                b'a' + high - 10
+            },
+            if low < 10 {
+                b'0' + low
+            } else {
+                b'a' + low - 10
+            },
+        );
+        i += 1;
     }
-}
+    bytes
+};
+
 
 #[macro_export]
 // We only use our own error type; no need for From conversions provided by the
@@ -93,77 +95,71 @@ macro_rules! tri {
     };
 }
 
-#[cfg_attr(target_arch = "aarch64", allow(unused))]
 #[inline]
 pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
-    let mut output = String::with_capacity(input.as_ref().len() + 2);
-    let writer = unsafe { output.as_mut_vec() };
-    writer.push(b'"');
-    encode_str_inner(input.as_ref().as_bytes(), writer);
-    writer.push(b'"');
-    output
+    let s = input.as_ref();
+    let bytes = s.as_bytes();
+
+    // Estimate capacity - most strings don't need much escaping
+    // Add some padding for potential escapes
+    let estimated_capacity = bytes.len() + bytes.len() / 2 + 2;
+    let mut result = Vec::with_capacity(estimated_capacity);
+
+    result.push(b'"');
+
+    let mut start = 0;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        // Use lookup table to check if escaping is needed
+        let escape_byte = ESCAPE[b as usize];
+
+        if escape_byte == 0 {
+            // No escape needed, continue scanning
+            i += 1;
+            continue;
+        }
+
+        // Copy any unescaped bytes before this position
+        if start < i {
+            result.extend_from_slice(&bytes[start..i]);
+        }
+
+        // Handle the escape
+        result.push(b'\\');
+        if escape_byte == UU {
+            // Unicode escape for control characters
+            result.extend_from_slice(b"u00");
+            let hex_digits = &HEX_BYTES[b as usize];
+            result.push(hex_digits.0);
+            result.push(hex_digits.1);
+        } else {
+            // Simple escape
+            result.push(escape_byte);
+        }
+
+        i += 1;
+        start = i;
+    }
+
+    // Copy any remaining unescaped bytes
+    if start < bytes.len() {
+        result.extend_from_slice(&bytes[start..]);
+    }
+
+    result.push(b'"');
+
+    // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
+    unsafe { String::from_utf8_unchecked(result) }
 }
 
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(not(target_arch = "x86_64"))]
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     encode_str_fallback(input)
 }
 
-#[inline]
-pub(crate) fn encode_str_inner(bytes: &[u8], writer: &mut Vec<u8>) {
-    let mut start = 0;
-    for (i, &byte) in bytes.iter().enumerate() {
-        let escape = ESCAPE[byte as usize];
-        if escape == 0 {
-            continue;
-        }
-
-        if start < i {
-            writer.extend_from_slice(&bytes[start..i]);
-        }
-
-        let char_escape = CharEscape::from_escape_table(escape, byte);
-        write_char_escape(writer, char_escape);
-
-        start = i + 1;
-    }
-
-    if start == bytes.len() {
-        return;
-    }
-    writer.extend_from_slice(&bytes[start..]);
-}
-
-/// Writes a character escape code to the specified writer.
-#[inline]
-fn write_char_escape(writer: &mut Vec<u8>, char_escape: CharEscape) {
-    use self::CharEscape::*;
-
-    let s = match char_escape {
-        Quote => b"\\\"",
-        ReverseSolidus => REVERSE_SOLIDUS,
-        Solidus => b"\\/",
-        Backspace => b"\\b",
-        FormFeed => b"\\f",
-        LineFeed => b"\\n",
-        CarriageReturn => b"\\r",
-        Tab => b"\\t",
-        AsciiControl(byte) => {
-            static HEX_DIGITS: [u8; 16] = *b"0123456789abcdef";
-            let bytes = &[
-                b'\\',
-                b'u',
-                b'0',
-                b'0',
-                HEX_DIGITS[(byte >> 4) as usize],
-                HEX_DIGITS[(byte & 0xF) as usize],
-            ];
-            return writer.extend_from_slice(bytes);
-        }
-    };
-
-    writer.extend_from_slice(s)
-}
 
 #[test]
 fn test_escape_ascii_json_string() {
