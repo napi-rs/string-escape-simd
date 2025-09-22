@@ -448,16 +448,3 @@ fn write_escape(result: &mut Vec<u8>, escape_byte: u8, c: u8) {
     }
 }
 
-// Public entry point that does runtime CPU detection
-#[inline]
-pub fn encode_str<S: AsRef<str>>(input: S) -> String {
-    // Runtime CPU feature detection
-    if is_x86_feature_detected!("avx2") {
-        unsafe { encode_str_avx2(input) }
-    } else if is_x86_feature_detected!("sse2") {
-        unsafe { encode_str_sse2(input) }
-    } else {
-        // Fallback to scalar implementation
-        crate::encode_str_fallback(input)
-    }
-}
