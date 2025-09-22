@@ -1,27 +1,10 @@
 #![cfg_attr(feature = "nightly", feature(test))]
 
 #[cfg(target_arch = "x86_64")]
-pub use x86_64::encode_str;
+pub use x86::encode_str;
 
 #[cfg(target_arch = "x86_64")]
-mod avx2;
-
-#[cfg(target_arch = "x86_64")]
-mod x86_64 {
-    #[inline]
-    pub fn encode_str<S: AsRef<str>>(input: S) -> String {
-        // Runtime CPU feature detection for AVX2
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            if is_x86_feature_detected!("avx2") {
-                return crate::avx2::encode_str(input);
-            }
-        }
-
-        // Fallback to optimized non-SIMD implementation
-        crate::encode_str_fallback(input)
-    }
-}
+mod x86;
 
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
