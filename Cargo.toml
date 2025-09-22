@@ -19,8 +19,9 @@ harness = false
 anyhow = "1"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 serde_json = "1"
+v_jsonescape = "0.7"
 
 [profile.bench]
 lto = true
