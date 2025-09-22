@@ -8,16 +8,13 @@ mod avx2;
 
 #[cfg(target_arch = "x86_64")]
 mod x86_64 {
-    use super::*;
-
     #[inline]
     pub fn encode_str<S: AsRef<str>>(input: S) -> String {
         // Runtime CPU feature detection for AVX2
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
             if is_x86_feature_detected!("avx2") {
-                // Safe to use AVX2 implementation
-                unsafe { return crate::avx2::encode_str(input) }
+                return crate::avx2::encode_str(input);
             }
         }
 
@@ -81,7 +78,6 @@ pub(crate) const HEX_BYTES: [(u8, u8); 256] = {
     }
     bytes
 };
-
 
 #[macro_export]
 // We only use our own error type; no need for From conversions provided by the
@@ -159,7 +155,6 @@ pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
 pub fn encode_str<S: AsRef<str>>(input: S) -> String {
     encode_str_fallback(input)
 }
-
 
 #[test]
 fn test_escape_ascii_json_string() {
