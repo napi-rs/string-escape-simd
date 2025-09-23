@@ -8,7 +8,7 @@ use std::arch::x86_64::{
     _mm512_cmplt_epu8_mask, _mm512_load_si512, _mm512_loadu_si512, _mm512_set1_epi8,
 };
 
-use crate::{ESCAPE, HEX_BYTES, UU};
+use crate::generic::{ESCAPE, HEX_BYTES, UU};
 
 // Constants for control character detection using signed comparison trick
 const TRANSLATION_A: i8 = i8::MAX - 31i8;
