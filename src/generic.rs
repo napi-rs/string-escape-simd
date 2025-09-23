@@ -14,6 +14,15 @@ pub fn escape_generic<S: AsRef<str>>(s: S) -> String {
 }
 
 #[inline]
+pub fn escape_into_generic<S: AsRef<str>>(s: S, output: &mut Vec<u8>) {
+    let s = s.as_ref();
+    let bytes = s.as_bytes();
+    output.push(b'"');
+    escape_inner(bytes, output);
+    output.push(b'"');
+}
+
+#[inline]
 // Slightly modified version of
 // <https://github.com/serde-rs/json/blob/d12e943590208da738c092db92c34b39796a2538/src/ser.rs#L2079>
 // Borrowed from:
