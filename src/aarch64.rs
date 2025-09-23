@@ -2,7 +2,7 @@ use std::arch::aarch64::{
     vceqq_u8, vdupq_n_u8, vld1q_u8_x4, vmaxvq_u8, vorrq_u8, vqtbl4q_u8, vst1q_u8,
 };
 
-use crate::{ESCAPE, HEX_BYTES, UU};
+use crate::generic::{ESCAPE, HEX_BYTES, UU};
 
 const CHUNK: usize = 64;
 // 128 bytes ahead

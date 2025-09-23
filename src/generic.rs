@@ -95,7 +95,7 @@ pub(crate) static ESCAPE: [u8; 256] = [
 ];
 
 // Pre-computed hex digit pairs for control characters
-pub(crate) struct HexPair(u8, u8);
+pub(crate) struct HexPair(pub(crate) u8, pub(crate) u8);
 
 pub(crate) static HEX_BYTES: [HexPair; 32] = [
     HexPair(b'0', b'0'),
