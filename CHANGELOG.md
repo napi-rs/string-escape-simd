@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.4...json-escape-simd-v1.1.0) - 2025-09-23
+
+### Added
+
+- add escape_into ([#18](https://github.com/napi-rs/json-escape-simd/pull/18))
+
 ## [1.0.4](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.3...json-escape-simd-v1.0.4) - 2025-09-23
 
 ### Other
