@@ -106,6 +106,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
+name = "cpu-features"
+version = "0.1.0"
+
+[[package]]
 name = "criterion"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,6 +214,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-escape"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3100a96840f2d70dd1c336ec5f76f160edfd56d8e9de2a949d440c0805459cce"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "json-escape-simd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "json-escape",
+ "serde_json",
+ "v_jsonescape",
+]
+
+[[package]]
 name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -217,9 +241,9 @@ checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 
 [[package]]
 name = "memchr"
-version = "2.7.4"
+version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
+checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
 name = "num-traits"
@@ -382,16 +406,6 @@ dependencies = [
  "memchr",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "string-escape-simd"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "criterion",
- "serde_json",
- "v_jsonescape",
 ]
 
 [[package]]

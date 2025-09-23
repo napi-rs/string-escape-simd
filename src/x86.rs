@@ -1,10 +1,11 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use std::arch::x86_64::{
-    __m128i, __m256i, __m512i, _mm256_add_epi8, _mm256_cmpeq_epi8, _mm256_cmpgt_epi8, _mm256_load_si256,
-    _mm256_loadu_si256, _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8,
-    _mm512_cmpeq_epi8_mask, _mm512_cmplt_epu8_mask, _mm512_load_si512, _mm512_loadu_si512,
-    _mm512_set1_epi8,
-    _mm_add_epi8, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_load_si128, _mm_loadu_si128,
-    _mm_movemask_epi8, _mm_or_si128, _mm_prefetch, _mm_set1_epi8, _MM_HINT_T0,
+    __m128i, __m256i, __m512i, _MM_HINT_T0, _mm_add_epi8, _mm_cmpeq_epi8, _mm_cmpgt_epi8,
+    _mm_load_si128, _mm_loadu_si128, _mm_movemask_epi8, _mm_or_si128, _mm_prefetch, _mm_set1_epi8,
+    _mm256_add_epi8, _mm256_cmpeq_epi8, _mm256_cmpgt_epi8, _mm256_load_si256, _mm256_loadu_si256,
+    _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8, _mm512_cmpeq_epi8_mask,
+    _mm512_cmplt_epu8_mask, _mm512_load_si512, _mm512_loadu_si512, _mm512_set1_epi8,
 };
 
 use crate::{ESCAPE, HEX_BYTES, UU};
@@ -29,7 +30,7 @@ fn sub(a: *const u8, b: *const u8) -> usize {
 }
 
 #[target_feature(enable = "avx512f", enable = "avx512bw")]
-pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
+pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -93,7 +94,10 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
 
                 // Prefetch next iteration's data
                 if ptr.add(LOOP_SIZE_AVX512 + PREFETCH_DISTANCE) < end_ptr {
-                    _mm_prefetch(ptr.add(LOOP_SIZE_AVX512 + PREFETCH_DISTANCE) as *const i8, _MM_HINT_T0);
+                    _mm_prefetch(
+                        ptr.add(LOOP_SIZE_AVX512 + PREFETCH_DISTANCE) as *const i8,
+                        _MM_HINT_T0,
+                    );
                 }
 
                 // Load all 4 vectors at once for better pipelining
@@ -139,9 +143,33 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
                 } else {
                     // Process each 64-byte chunk that has escapes
                     process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_a, 0);
-                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_b, M512_VECTOR_SIZE);
-                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_c, M512_VECTOR_SIZE * 2);
-                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_d, M512_VECTOR_SIZE * 3);
+                    process_mask_avx512(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_b,
+                        M512_VECTOR_SIZE,
+                    );
+                    process_mask_avx512(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_c,
+                        M512_VECTOR_SIZE * 2,
+                    );
+                    process_mask_avx512(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_d,
+                        M512_VECTOR_SIZE * 3,
+                    );
                 }
 
                 ptr = ptr.add(LOOP_SIZE_AVX512);
@@ -187,8 +215,7 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
             let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
             let ctrl_mask = _mm512_cmplt_epu8_mask(a, v_ctrl_limit);
 
-            let mut mask = ((quote_mask | slash_mask | ctrl_mask) as u64)
-                .wrapping_shr(d as u32);
+            let mut mask = ((quote_mask | slash_mask | ctrl_mask) as u64).wrapping_shr(d as u32);
 
             if mask != 0 {
                 let at = sub(ptr, start_ptr);
@@ -209,7 +236,7 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
         }
     } else {
         // Fall back to AVX2 for small strings
-        return encode_str_avx2(input);
+        return escape_avx2(input);
     }
 
     // Copy any remaining bytes
@@ -222,7 +249,7 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
 }
 
 #[target_feature(enable = "avx2")]
-pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
+pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -288,7 +315,10 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
 
                 // Prefetch next iteration's data
                 if ptr.add(LOOP_SIZE_AVX2 + PREFETCH_DISTANCE) < end_ptr {
-                    _mm_prefetch(ptr.add(LOOP_SIZE_AVX2 + PREFETCH_DISTANCE) as *const i8, _MM_HINT_T0);
+                    _mm_prefetch(
+                        ptr.add(LOOP_SIZE_AVX2 + PREFETCH_DISTANCE) as *const i8,
+                        _MM_HINT_T0,
+                    );
                 }
 
                 // Load all 4 vectors at once for better pipelining
@@ -322,10 +352,8 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
                 let cmp_d = _mm256_or_si256(_mm256_or_si256(quote_3, slash_3), ctrl_3);
 
                 // Fast path: check if any escaping needed
-                let any_escape = _mm256_or_si256(
-                    _mm256_or_si256(cmp_a, cmp_b),
-                    _mm256_or_si256(cmp_c, cmp_d),
-                );
+                let any_escape =
+                    _mm256_or_si256(_mm256_or_si256(cmp_a, cmp_b), _mm256_or_si256(cmp_c, cmp_d));
 
                 if _mm256_movemask_epi8(any_escape) == 0 {
                     // No escapes needed, copy whole chunk
@@ -343,9 +371,33 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
 
                     // Process each 32-byte chunk that has escapes
                     process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_a, 0);
-                    process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_b, M256_VECTOR_SIZE);
-                    process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_c, M256_VECTOR_SIZE * 2);
-                    process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_d, M256_VECTOR_SIZE * 3);
+                    process_mask_avx(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_b,
+                        M256_VECTOR_SIZE,
+                    );
+                    process_mask_avx(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_c,
+                        M256_VECTOR_SIZE * 2,
+                    );
+                    process_mask_avx(
+                        ptr,
+                        start_ptr,
+                        &mut result,
+                        &mut start,
+                        bytes,
+                        mask_d,
+                        M256_VECTOR_SIZE * 3,
+                    );
                 }
 
                 ptr = ptr.add(LOOP_SIZE_AVX2);
@@ -423,7 +475,7 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
         }
     } else {
         // Fall back to SSE2 for small strings
-        return encode_str_sse2(input);
+        return escape_sse2(input);
     }
 
     // Copy any remaining bytes
@@ -436,7 +488,7 @@ pub unsafe fn encode_str_avx2<S: AsRef<str>>(input: S) -> String {
 }
 
 #[target_feature(enable = "sse2")]
-pub unsafe fn encode_str_sse2<S: AsRef<str>>(input: S) -> String {
+pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
     let len = bytes.len();
