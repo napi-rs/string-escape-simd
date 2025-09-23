@@ -10,13 +10,8 @@ const PREFETCH_DISTANCE: usize = CHUNK * 2;
 const SLASH_SENTINEL: u8 = 0xFF;
 
 #[inline]
-pub fn escape_neon<S: AsRef<str>>(input: S) -> String {
-    let s = input.as_ref();
-    let bytes = s.as_bytes();
+pub fn escape_neon(bytes: &[u8], output: &mut Vec<u8>) {
     let n = bytes.len();
-
-    let mut out = Vec::with_capacity(n + 2);
-    out.push(b'"');
 
     unsafe {
         let tbl = vld1q_u8_x4(ESCAPE.as_ptr());
@@ -53,7 +48,7 @@ pub fn escape_neon<S: AsRef<str>>(input: S) -> String {
             let mask_r_4 = vmaxvq_u8(mask_4);
 
             if mask_r_1 | mask_r_2 | mask_r_3 | mask_r_4 == 0 {
-                out.extend_from_slice(std::slice::from_raw_parts(ptr, CHUNK));
+                output.extend_from_slice(std::slice::from_raw_parts(ptr, CHUNK));
                 i += CHUNK;
                 continue;
             }
@@ -61,10 +56,10 @@ pub fn escape_neon<S: AsRef<str>>(input: S) -> String {
             macro_rules! handle {
                 ($mask:expr, $mask_r:expr, $off:expr) => {
                     if $mask_r == 0 {
-                        out.extend_from_slice(std::slice::from_raw_parts(ptr.add($off), 16));
+                        output.extend_from_slice(std::slice::from_raw_parts(ptr.add($off), 16));
                     } else {
                         vst1q_u8(placeholder.as_mut_ptr(), $mask);
-                        handle_block(&bytes[i + $off..i + $off + 16], &placeholder, &mut out);
+                        handle_block(&bytes[i + $off..i + $off + 16], &placeholder, output);
                     }
                 };
             }
@@ -78,13 +73,9 @@ pub fn escape_neon<S: AsRef<str>>(input: S) -> String {
         }
 
         if i < n {
-            handle_tail(&bytes[i..], &mut out);
+            handle_tail(&bytes[i..], output);
         }
     }
-
-    out.push(b'"');
-
-    unsafe { String::from_utf8_unchecked(out) }
 }
 
 #[inline(always)]

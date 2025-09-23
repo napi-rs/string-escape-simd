@@ -114,19 +114,19 @@ mod generic;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
-pub use generic::escape_generic;
+pub use generic::{escape_generic, escape_into_generic};
 
 /// Main entry point for JSON string escaping with SIMD acceleration
 /// If the platform is supported, the SIMD path will be used. Otherwise, the generic fallback will be used.
 pub fn escape<S: AsRef<str>>(input: S) -> String {
+    use generic::escape_inner;
+
+    let mut result = Vec::with_capacity(input.as_ref().len() + input.as_ref().len() / 2 + 2);
+    result.push(b'"');
+    let s = input.as_ref();
+    let bytes = s.as_bytes();
     #[cfg(target_arch = "x86_64")]
     {
-        use generic::escape_inner;
-
-        let mut result = Vec::with_capacity(input.as_ref().len() + input.as_ref().len() / 2 + 2);
-        result.push(b'"');
-        let s = input.as_ref();
-        let bytes = s.as_bytes();
         let len = bytes.len();
         // Runtime CPU feature detection for x86_64
         if is_x86_feature_detected!("avx512f")
@@ -144,16 +144,13 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
         } else {
             escape_inner(bytes, &mut result);
         }
-        result.push(b'"');
-        // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
-        unsafe { String::from_utf8_unchecked(result) }
     }
 
     #[cfg(target_arch = "aarch64")]
     {
         #[cfg(feature = "force_aarch64_neon")]
         {
-            return aarch64::escape_neon(input);
+            aarch64::escape_neon(bytes, &mut result);
         }
         #[cfg(not(feature = "force_aarch64_neon"))]
         {
@@ -162,15 +159,76 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
             // TODO: add support for sve2 chips with wider registers
             // github actions ubuntu-24.04-arm runner has 128 bits sve2 registers, it's not enough for the SIMD path
             if cfg!(target_os = "macos") && std::arch::is_aarch64_feature_detected!("bf16") {
-                return aarch64::escape_neon(input);
+                aarch64::escape_neon(bytes, &mut result);
             } else {
-                return escape_generic(input);
+                escape_inner(bytes, &mut result);
             }
         }
     }
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    escape_generic(input)
+    {
+        escape_inner(bytes, &mut result);
+    }
+    result.push(b'"');
+    // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
+    unsafe { String::from_utf8_unchecked(result) }
+}
+
+/// Main entry point for JSON string escaping with SIMD acceleration
+/// If the platform is supported, the SIMD path will be used. Otherwise, the generic fallback will be used.
+pub fn escape_into<S: AsRef<str>>(input: S, output: &mut Vec<u8>) {
+    use generic::escape_inner;
+
+    output.push(b'"');
+    let s = input.as_ref();
+    let bytes = s.as_bytes();
+    #[cfg(target_arch = "x86_64")]
+    {
+        let len = bytes.len();
+        // Runtime CPU feature detection for x86_64
+        if is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && len >= x86::LOOP_SIZE_AVX512
+        {
+            unsafe { x86::escape_avx512(bytes, output) }
+        } else if is_x86_feature_detected!("avx2") && len >= x86::LOOP_SIZE_AVX2 {
+            unsafe { x86::escape_avx2(bytes, output) }
+        } else if is_x86_feature_detected!("sse2")
+          && /* if len < 128, no need to use simd */
+          len >= x86::LOOP_SIZE_AVX2
+        {
+            unsafe { x86::escape_sse2(bytes, output) }
+        } else {
+            escape_inner(bytes, output);
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        #[cfg(feature = "force_aarch64_neon")]
+        {
+            return aarch64::escape_neon(bytes, output);
+        }
+        #[cfg(not(feature = "force_aarch64_neon"))]
+        {
+            // on Apple M2 and later, the `bf16` feature is available
+            // it means they have more registers and can significantly benefit from the SIMD path
+            // TODO: add support for sve2 chips with wider registers
+            // github actions ubuntu-24.04-arm runner has 128 bits sve2 registers, it's not enough for the SIMD path
+            if cfg!(target_os = "macos") && std::arch::is_aarch64_feature_detected!("bf16") {
+                aarch64::escape_neon(bytes, output);
+            } else {
+                escape_inner(bytes, output);
+            }
+        }
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        escape_into_generic(input, output);
+    }
+    output.push(b'"');
 }
 
 #[test]
@@ -377,6 +435,9 @@ fn test_rxjs() {
     assert!(!sources.is_empty());
     for source in sources {
         assert_eq!(escape(&source), serde_json::to_string(&source).unwrap());
+        let mut output = String::new();
+        escape_into(&source, unsafe { output.as_mut_vec() });
+        assert_eq!(output, serde_json::to_string(&source).unwrap());
     }
 }
 
@@ -402,5 +463,8 @@ fn test_sources() {
     assert!(!sources.is_empty());
     for source in sources {
         assert_eq!(escape(&source), serde_json::to_string(&source).unwrap());
+        let mut output = String::new();
+        escape_into(&source, unsafe { output.as_mut_vec() });
+        assert_eq!(output, serde_json::to_string(&source).unwrap());
     }
 }
