@@ -1,7 +1,7 @@
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "force_aarch64_generic")))]
 mod aarch64;
 
 const BB: u8 = b'b'; // \x08
@@ -150,7 +150,14 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
 
     #[cfg(target_arch = "aarch64")]
     {
-        return aarch64::escape_neon(input);
+        #[cfg(feature = "force_aarch64_generic")]
+        {
+            return escape_generic(input);
+        }
+        #[cfg(not(feature = "force_aarch64_generic"))]
+        {
+            return aarch64::escape_neon(input);
+        }
     }
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]

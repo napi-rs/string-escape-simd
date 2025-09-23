@@ -3,13 +3,17 @@ members = ["cpu-features"]
 
 [package]
 name = "json-escape-simd"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.89.0"
+include = ["src/**/*.rs"]
 
 [[example]]
 name = "escape"
 path = "examples/escape.rs"
+
+[features]
+force_aarch64_generic = [] # Force use of generic implementation on aarch64
 
 [[bench]]
 name = "escape"

@@ -5,7 +5,8 @@ use std::arch::aarch64::{
 use crate::{ESCAPE, HEX_BYTES, UU};
 
 const CHUNK: usize = 64;
-const PREFETCH_DISTANCE: usize = CHUNK * 4;
+// 128 bytes ahead
+const PREFETCH_DISTANCE: usize = CHUNK * 2;
 const SLASH_SENTINEL: u8 = 0xFF;
 
 #[inline]
@@ -30,9 +31,8 @@ pub fn escape_neon<S: AsRef<str>>(input: S) -> String {
             let ptr = bytes.as_ptr().add(i);
 
             core::arch::asm!(
-                "prfm pldl1keep, [{0}, #{1}]",
-                in(reg) ptr,
-                const PREFETCH_DISTANCE,
+                "prfm pldl1keep, [{0}]",
+                in(reg) ptr.add(PREFETCH_DISTANCE),
             );
 
             let quad = vld1q_u8_x4(ptr);
