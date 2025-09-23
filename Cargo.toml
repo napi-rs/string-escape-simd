@@ -20,6 +20,7 @@ anyhow = "1"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
+glob = "0.3"
 serde_json = "1"
 v_jsonescape = "0.7"
 json-escape = "0.1.1"

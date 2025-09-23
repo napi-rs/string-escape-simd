@@ -32,7 +32,17 @@ jobs:
         run: |
           rustup toolchain install nightly
           cargo +nightly run -p cpu-features --features nightly
-      - name: Run benchmarks
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'yarn'
+      - name: Install dependencies
+        run: yarn install
+      - name: Download fixtures
+        run: node download-fixtures.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run tests
         run: cargo test
 
   bench:
@@ -55,6 +65,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.settings.target }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'yarn'
+      - name: Install dependencies
+        run: yarn install
+      - name: Download fixtures
+        run: node download-fixtures.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run benchmarks
         run: cargo bench
         env:

@@ -1,6 +1,9 @@
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
+#[cfg(target_arch = "aarch64")]
+mod aarch64;
+
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
 const NN: u8 = b'n'; // \x0A
@@ -140,10 +143,17 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
             unsafe { return x86::escape_avx2(input) }
         } else if is_x86_feature_detected!("sse2") {
             unsafe { return x86::escape_sse2(input) }
+        } else {
+            return escape_generic(input);
         }
     }
 
-    // Fallback to optimized scalar implementation
+    #[cfg(target_arch = "aarch64")]
+    {
+        return aarch64::escape_neon(input);
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     escape_generic(input)
 }
 
@@ -339,4 +349,42 @@ fn test_repeated_patterns() {
 
     let pattern3 = "\t\n".repeat(100);
     assert_eq!(escape(&pattern3), serde_json::to_string(&pattern3).unwrap());
+}
+
+#[test]
+fn test_rxjs() {
+    let dir = glob::glob("node_modules/rxjs/src/**/*.ts").unwrap();
+    let mut sources = Vec::new();
+    for entry in dir {
+        sources.push(std::fs::read_to_string(entry.unwrap()).unwrap());
+    }
+    assert!(!sources.is_empty());
+    for source in sources {
+        assert_eq!(escape(&source), serde_json::to_string(&source).unwrap());
+    }
+}
+
+#[test]
+fn test_sources() {
+    let ts_paths = glob::glob("fixtures/**/*.ts").unwrap();
+    let tsx_paths = glob::glob("fixtures/**/*.tsx").unwrap();
+    let js_paths = glob::glob("fixtures/**/*.js").unwrap();
+    let mjs_paths = glob::glob("fixtures/**/*.mjs").unwrap();
+    let cjs_paths = glob::glob("fixtures/**/*.cjs").unwrap();
+    let mut sources = Vec::new();
+    for entry in ts_paths
+        .chain(tsx_paths)
+        .chain(js_paths)
+        .chain(mjs_paths)
+        .chain(cjs_paths)
+    {
+        let p = entry.unwrap();
+        if std::fs::metadata(&p).unwrap().is_file() {
+            sources.push(std::fs::read_to_string(&p).unwrap());
+        }
+    }
+    assert!(!sources.is_empty());
+    for source in sources {
+        assert_eq!(escape(&source), serde_json::to_string(&source).unwrap());
+    }
 }
