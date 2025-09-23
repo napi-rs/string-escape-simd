@@ -4,7 +4,15 @@
 )]
 #![cfg_attr(
     all(target_arch = "x86_64", feature = "nightly"),
-    feature(stdarch_x86_feature_detection)
+    feature(xop_target_feature)
+)]
+#![cfg_attr(
+    all(target_arch = "x86_64", feature = "nightly"),
+    feature(movrs_target_feature)
+)]
+#![cfg_attr(
+    all(target_arch = "x86_64", feature = "nightly"),
+    feature(x86_amx_intrinsics)
 )]
 
 use std::fmt::{self, Write as _};
