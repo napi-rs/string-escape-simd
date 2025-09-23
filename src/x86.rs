@@ -30,6 +30,7 @@ fn sub(a: *const u8, b: *const u8) -> usize {
 }
 
 #[target_feature(enable = "avx512f", enable = "avx512bw")]
+#[inline]
 pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
@@ -249,6 +250,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
 }
 
 #[target_feature(enable = "avx2")]
+#[inline]
 pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
@@ -488,6 +490,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
 }
 
 #[target_feature(enable = "sse2")]
+#[inline]
 pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();

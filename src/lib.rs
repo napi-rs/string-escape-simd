@@ -130,7 +130,6 @@ pub fn escape_generic<S: AsRef<str>>(input: S) -> String {
 }
 
 /// Main entry point for JSON string escaping with SIMD acceleration
-#[inline]
 pub fn escape<S: AsRef<str>>(input: S) -> String {
     #[cfg(target_arch = "x86_64")]
     {
