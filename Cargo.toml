@@ -7,6 +7,10 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.89.0"
 include = ["src/**/*.rs"]
+description = "Optimized SIMD routines for escaping JSON strings."
+license = "MIT"
+homepage = "https://github.com/napi-rs/json-escape-simd"
+repository = "https://github.com/napi-rs/json-escape-simd"
 
 [[example]]
 name = "escape"
