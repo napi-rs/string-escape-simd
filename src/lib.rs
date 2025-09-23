@@ -22,21 +22,21 @@
 //!
 //! | Implementation        | Median time   | vs fastest |
 //! | --------------------- | ------------- | ---------- |
-//! | **`escape simd`**     | **345.06 µs** | **1.00×**  |
-//! | `escape v_jsonescape` | 576.25 µs     | 1.67×      |
-//! | `escape generic`      | 657.94 µs     | 1.91×      |
-//! | `serde_json`          | 766.72 µs     | 2.22×      |
-//! | `json-escape`         | 782.65 µs     | 2.27×      |
+//! | **`escape simd`**     | **341.18 µs** | **1.00×**  |
+//! | `escape v_jsonescape` | 555.47 µs     | 1.63×      |
+//! | `escape generic`      | 656.85 µs     | 1.93×      |
+//! | `serde_json`          | 744.75 µs     | 2.18×      |
+//! | `json-escape`         | 777.15 µs     | 2.28×      |
 //!
 //! **Fixtures payload (~300 iterations)**
 //!
 //! | Implementation        | Median time  | vs fastest |
 //! | --------------------- | ------------ | ---------- |
-//! | **`escape simd`**     | **12.84 ms** | **1.00×**  |
-//! | `escape v_jsonescape` | 19.66 ms     | 1.53×      |
-//! | `escape generic`      | 22.53 ms     | 1.75×      |
-//! | `serde_json`          | 24.65 ms     | 1.92×      |
-//! | `json-escape`         | 26.64 ms     | 2.07×      |
+//! | **`escape simd`**     | **12.67 ms** | **1.00×**  |
+//! | `escape v_jsonescape` | 20.58 ms     | 1.62×      |
+//! | `escape generic`      | 22.57 ms     | 1.78×      |
+//! | `serde_json`          | 24.52 ms     | 1.94×      |
+//! | `json-escape`         | 26.97 ms     | 2.13×      |
 //!
 //! ### GitHub Actions aarch64 (`ubuntu-24.04-arm`)
 //!
