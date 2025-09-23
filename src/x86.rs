@@ -1,8 +1,8 @@
 use std::arch::x86_64::{
     __m128i, __m256i, __m512i, _mm256_add_epi8, _mm256_cmpeq_epi8, _mm256_cmpgt_epi8, _mm256_load_si256,
     _mm256_loadu_si256, _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8,
-    _mm512_add_epi8, _mm512_cmpeq_epi8_mask, _mm512_cmpgt_epi8_mask, _mm512_load_si512,
-    _mm512_loadu_si512, _mm512_set1_epi8,
+    _mm512_cmpeq_epi8_mask, _mm512_cmplt_epu8_mask, _mm512_load_si512, _mm512_loadu_si512,
+    _mm512_set1_epi8,
     _mm_add_epi8, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_load_si128, _mm_loadu_si128,
     _mm_movemask_epi8, _mm_or_si128, _mm_prefetch, _mm_set1_epi8, _MM_HINT_T0,
 };
@@ -46,10 +46,9 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
     let mut start = 0;
 
     if len >= M512_VECTOR_SIZE {
-        let v_translation_a = _mm512_set1_epi8(TRANSLATION_A);
-        let v_below_a = _mm512_set1_epi8(BELOW_A);
         let v_b = _mm512_set1_epi8(B);
         let v_c = _mm512_set1_epi8(C);
+        let v_ctrl_limit = _mm512_set1_epi8(0x20);
 
         // Handle alignment - skip if already aligned
         const M512_VECTOR_ALIGN: usize = M512_VECTOR_SIZE - 1;
@@ -61,29 +60,27 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
             // Check for quotes, backslash, and control characters
             let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
             let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
-            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+            let ctrl_mask = _mm512_cmplt_epu8_mask(a, v_ctrl_limit);
 
             let mut mask = (quote_mask | slash_mask | ctrl_mask) as u64;
+            if align < 64 {
+                mask &= (1u64 << align) - 1;
+            }
 
             if mask != 0 {
                 let at = sub(ptr, start_ptr);
-                let mut cur = mask.trailing_zeros() as usize;
-                while cur < align {
+                while mask != 0 {
+                    let cur = mask.trailing_zeros() as usize;
                     let c = *ptr.add(cur);
                     let escape_byte = ESCAPE[c as usize];
-                    if escape_byte != 0 {
-                        let i = at + cur;
-                        if start < i {
-                            result.extend_from_slice(&bytes[start..i]);
-                        }
-                        write_escape(&mut result, escape_byte, c);
-                        start = i + 1;
+                    debug_assert!(escape_byte != 0);
+                    let i = at + cur;
+                    if start < i {
+                        result.extend_from_slice(&bytes[start..i]);
                     }
-                    mask ^= 1 << cur;
-                    if mask == 0 {
-                        break;
-                    }
-                    cur = mask.trailing_zeros() as usize;
+                    write_escape(&mut result, escape_byte, c);
+                    start = i + 1;
+                    mask &= mask - 1;
                 }
             }
             ptr = ptr.add(align);
@@ -118,10 +115,10 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
                 let slash_3 = _mm512_cmpeq_epi8_mask(a3, v_c);
 
                 // Check for control characters (< 0x20) in all vectors
-                let ctrl_0 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a0, v_translation_a), v_below_a);
-                let ctrl_1 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a1, v_translation_a), v_below_a);
-                let ctrl_2 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a2, v_translation_a), v_below_a);
-                let ctrl_3 = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a3, v_translation_a), v_below_a);
+                let ctrl_0 = _mm512_cmplt_epu8_mask(a0, v_ctrl_limit);
+                let ctrl_1 = _mm512_cmplt_epu8_mask(a1, v_ctrl_limit);
+                let ctrl_2 = _mm512_cmplt_epu8_mask(a2, v_ctrl_limit);
+                let ctrl_3 = _mm512_cmplt_epu8_mask(a3, v_ctrl_limit);
 
                 // Combine all masks
                 let mask_a = quote_0 | slash_0 | ctrl_0;
@@ -158,29 +155,24 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
 
             let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
             let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
-            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+            let ctrl_mask = _mm512_cmplt_epu8_mask(a, v_ctrl_limit);
 
             let mut mask = (quote_mask | slash_mask | ctrl_mask) as u64;
 
             if mask != 0 {
                 let at = sub(ptr, start_ptr);
-                let mut cur = mask.trailing_zeros() as usize;
-                loop {
+                while mask != 0 {
+                    let cur = mask.trailing_zeros() as usize;
                     let c = *ptr.add(cur);
                     let escape_byte = ESCAPE[c as usize];
-                    if escape_byte != 0 {
-                        let i = at + cur;
-                        if start < i {
-                            result.extend_from_slice(&bytes[start..i]);
-                        }
-                        write_escape(&mut result, escape_byte, c);
-                        start = i + 1;
+                    debug_assert!(escape_byte != 0);
+                    let i = at + cur;
+                    if start < i {
+                        result.extend_from_slice(&bytes[start..i]);
                     }
-                    mask ^= 1 << cur;
-                    if mask == 0 {
-                        break;
-                    }
-                    cur = mask.trailing_zeros() as usize;
+                    write_escape(&mut result, escape_byte, c);
+                    start = i + 1;
+                    mask &= mask - 1;
                 }
             }
             ptr = ptr.add(M512_VECTOR_SIZE);
@@ -193,30 +185,25 @@ pub unsafe fn encode_str_avx512<S: AsRef<str>>(input: S) -> String {
 
             let quote_mask = _mm512_cmpeq_epi8_mask(a, v_b);
             let slash_mask = _mm512_cmpeq_epi8_mask(a, v_c);
-            let ctrl_mask = _mm512_cmpgt_epi8_mask(_mm512_add_epi8(a, v_translation_a), v_below_a);
+            let ctrl_mask = _mm512_cmplt_epu8_mask(a, v_ctrl_limit);
 
             let mut mask = ((quote_mask | slash_mask | ctrl_mask) as u64)
                 .wrapping_shr(d as u32);
 
             if mask != 0 {
                 let at = sub(ptr, start_ptr);
-                let mut cur = mask.trailing_zeros() as usize;
-                loop {
+                while mask != 0 {
+                    let cur = mask.trailing_zeros() as usize;
                     let c = *ptr.add(cur);
                     let escape_byte = ESCAPE[c as usize];
-                    if escape_byte != 0 {
-                        let i = at + cur;
-                        if start < i {
-                            result.extend_from_slice(&bytes[start..i]);
-                        }
-                        write_escape(&mut result, escape_byte, c);
-                        start = i + 1;
+                    debug_assert!(escape_byte != 0);
+                    let i = at + cur;
+                    if start < i {
+                        result.extend_from_slice(&bytes[start..i]);
                     }
-                    mask ^= 1 << cur;
-                    if mask == 0 {
-                        break;
-                    }
-                    cur = mask.trailing_zeros() as usize;
+                    write_escape(&mut result, escape_byte, c);
+                    start = i + 1;
+                    mask &= mask - 1;
                 }
             }
         }
@@ -626,17 +613,16 @@ unsafe fn process_mask_avx(
         let cur = remaining.trailing_zeros() as usize;
         let c = *ptr.add(cur);
         let escape_byte = ESCAPE[c as usize];
+        debug_assert!(escape_byte != 0);
 
-        if escape_byte != 0 {
-            let i = at + cur;
-            // Copy unescaped portion if needed
-            if *start < i {
-                result.extend_from_slice(&bytes[*start..i]);
-            }
-            // Write escape sequence
-            write_escape(result, escape_byte, c);
-            *start = i + 1;
+        let i = at + cur;
+        // Copy unescaped portion if needed
+        if *start < i {
+            result.extend_from_slice(&bytes[*start..i]);
         }
+        // Write escape sequence
+        write_escape(result, escape_byte, c);
+        *start = i + 1;
 
         // Clear the lowest set bit
         remaining &= remaining - 1;
@@ -666,17 +652,16 @@ unsafe fn process_mask_avx512(
         let cur = remaining.trailing_zeros() as usize;
         let c = *ptr.add(cur);
         let escape_byte = ESCAPE[c as usize];
+        debug_assert!(escape_byte != 0);
 
-        if escape_byte != 0 {
-            let i = at + cur;
-            // Copy unescaped portion if needed
-            if *start < i {
-                result.extend_from_slice(&bytes[*start..i]);
-            }
-            // Write escape sequence
-            write_escape(result, escape_byte, c);
-            *start = i + 1;
+        let i = at + cur;
+        // Copy unescaped portion if needed
+        if *start < i {
+            result.extend_from_slice(&bytes[*start..i]);
         }
+        // Write escape sequence
+        write_escape(result, escape_byte, c);
+        *start = i + 1;
 
         // Clear the lowest set bit
         remaining &= remaining - 1;
@@ -697,4 +682,3 @@ fn write_escape(result: &mut Vec<u8>, escape_byte: u8, c: u8) {
         result.push(escape_byte);
     }
 }
-
