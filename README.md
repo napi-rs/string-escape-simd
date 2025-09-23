@@ -1,5 +1,8 @@
 # json-escape-simd
 
+![Crates.io Version](https://img.shields.io/crates/v/json-escape-simd)
+![docs.rs](https://img.shields.io/docsrs/json-escape-simd)
+
 Optimized SIMD routines for escaping JSON strings. This repository contains the `json-escape-simd` crate, comparison fixtures, and Criterion benches against commonly used alternatives.
 
 > [!IMPORTANT]
