@@ -1,19 +1,24 @@
 #[inline]
-// Slightly modified version of
-// <https://github.com/serde-rs/json/blob/d12e943590208da738c092db92c34b39796a2538/src/ser.rs#L2079>
-// Borrowed from:
-// <https://github.com/oxc-project/oxc-sourcemap/blob/e533e6ca4d08c538d8d4df74eacd29437851591f/src/encode.rs#L331>
 pub fn escape_generic<S: AsRef<str>>(s: S) -> String {
     let s = s.as_ref();
     let bytes = s.as_bytes();
-
     // Estimate capacity - most strings don't need much escaping
     // Add some padding for potential escapes
     let estimated_capacity = bytes.len() + bytes.len() / 2 + 2;
     let mut result = Vec::with_capacity(estimated_capacity);
-
     result.push(b'"');
+    escape_inner(bytes, &mut result);
+    result.push(b'"');
+    // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
+    unsafe { String::from_utf8_unchecked(result) }
+}
 
+#[inline]
+// Slightly modified version of
+// <https://github.com/serde-rs/json/blob/d12e943590208da738c092db92c34b39796a2538/src/ser.rs#L2079>
+// Borrowed from:
+// <https://github.com/oxc-project/oxc-sourcemap/blob/e533e6ca4d08c538d8d4df74eacd29437851591f/src/encode.rs#L331>
+pub(crate) fn escape_inner(bytes: &[u8], result: &mut Vec<u8>) {
     let mut start = 0;
     let mut i = 0;
 
@@ -55,11 +60,6 @@ pub fn escape_generic<S: AsRef<str>>(s: S) -> String {
     if start < bytes.len() {
         result.extend_from_slice(&bytes[start..]);
     }
-
-    result.push(b'"');
-
-    // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
-    unsafe { String::from_utf8_unchecked(result) }
 }
 
 const BB: u8 = b'b'; // \x08

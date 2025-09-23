@@ -31,16 +31,8 @@ fn sub(a: *const u8, b: *const u8) -> usize {
 
 #[target_feature(enable = "avx512f", enable = "avx512bw")]
 #[inline]
-pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
-    let s = input.as_ref();
-    let bytes = s.as_bytes();
+pub unsafe fn escape_avx512(bytes: &[u8], result: &mut Vec<u8>) {
     let len = bytes.len();
-
-    // Pre-allocate with estimated capacity
-    let estimated_capacity = len + len / 2 + 2;
-    let mut result = Vec::with_capacity(estimated_capacity);
-
-    result.push(b'"');
 
     let start_ptr = bytes.as_ptr();
     let end_ptr = bytes[len..].as_ptr();
@@ -80,7 +72,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     if start < i {
                         result.extend_from_slice(&bytes[start..i]);
                     }
-                    write_escape(&mut result, escape_byte, c);
+                    write_escape(result, escape_byte, c);
                     start = i + 1;
                     mask &= mask - 1;
                 }
@@ -143,11 +135,11 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     start = sub(ptr, start_ptr) + LOOP_SIZE_AVX512;
                 } else {
                     // Process each 64-byte chunk that has escapes
-                    process_mask_avx512(ptr, start_ptr, &mut result, &mut start, bytes, mask_a, 0);
+                    process_mask_avx512(ptr, start_ptr, result, &mut start, bytes, mask_a, 0);
                     process_mask_avx512(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_b,
@@ -156,7 +148,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     process_mask_avx512(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_c,
@@ -165,7 +157,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     process_mask_avx512(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_d,
@@ -199,7 +191,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     if start < i {
                         result.extend_from_slice(&bytes[start..i]);
                     }
-                    write_escape(&mut result, escape_byte, c);
+                    write_escape(result, escape_byte, c);
                     start = i + 1;
                     mask &= mask - 1;
                 }
@@ -229,7 +221,7 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
                     if start < i {
                         result.extend_from_slice(&bytes[start..i]);
                     }
-                    write_escape(&mut result, escape_byte, c);
+                    write_escape(result, escape_byte, c);
                     start = i + 1;
                     mask &= mask - 1;
                 }
@@ -237,30 +229,19 @@ pub unsafe fn escape_avx512<S: AsRef<str>>(input: S) -> String {
         }
     } else {
         // Fall back to AVX2 for small strings
-        return escape_avx2(input);
+        return escape_avx2(bytes, result);
     }
 
     // Copy any remaining bytes
     if start < len {
         result.extend_from_slice(&bytes[start..]);
     }
-
-    result.push(b'"');
-    unsafe { String::from_utf8_unchecked(result) }
 }
 
 #[target_feature(enable = "avx2")]
 #[inline]
-pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
-    let s = input.as_ref();
-    let bytes = s.as_bytes();
+pub unsafe fn escape_avx2(bytes: &[u8], result: &mut Vec<u8>) {
     let len = bytes.len();
-
-    // Pre-allocate with estimated capacity
-    let estimated_capacity = len + len / 2 + 2;
-    let mut result = Vec::with_capacity(estimated_capacity);
-
-    result.push(b'"');
 
     let start_ptr = bytes.as_ptr();
     let end_ptr = bytes[len..].as_ptr();
@@ -297,7 +278,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -372,11 +353,11 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                     let mask_d = _mm256_movemask_epi8(cmp_d);
 
                     // Process each 32-byte chunk that has escapes
-                    process_mask_avx(ptr, start_ptr, &mut result, &mut start, bytes, mask_a, 0);
+                    process_mask_avx(ptr, start_ptr, result, &mut start, bytes, mask_a, 0);
                     process_mask_avx(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_b,
@@ -385,7 +366,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                     process_mask_avx(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_c,
@@ -394,7 +375,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                     process_mask_avx(
                         ptr,
                         start_ptr,
-                        &mut result,
+                        result,
                         &mut start,
                         bytes,
                         mask_d,
@@ -428,7 +409,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -464,7 +445,7 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -477,29 +458,19 @@ pub unsafe fn escape_avx2<S: AsRef<str>>(input: S) -> String {
         }
     } else {
         // Fall back to SSE2 for small strings
-        return escape_sse2(input);
+        return escape_sse2(bytes, result);
     }
 
     // Copy any remaining bytes
     if start < len {
         result.extend_from_slice(&bytes[start..]);
     }
-
-    result.push(b'"');
-    unsafe { String::from_utf8_unchecked(result) }
 }
 
 #[target_feature(enable = "sse2")]
 #[inline]
-pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
-    let s = input.as_ref();
-    let bytes = s.as_bytes();
+pub unsafe fn escape_sse2(bytes: &[u8], result: &mut Vec<u8>) {
     let len = bytes.len();
-
-    let estimated_capacity = len + len / 2 + 2;
-    let mut result = Vec::with_capacity(estimated_capacity);
-
-    result.push(b'"');
 
     let start_ptr = bytes.as_ptr();
     let end_ptr = bytes[len..].as_ptr();
@@ -518,7 +489,7 @@ pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
                 if start < i {
                     result.extend_from_slice(&bytes[start..i]);
                 }
-                write_escape(&mut result, escape_byte, c);
+                write_escape(result, escape_byte, c);
                 start = i + 1;
             }
             ptr = ptr.offset(1);
@@ -552,7 +523,7 @@ pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -587,7 +558,7 @@ pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -623,7 +594,7 @@ pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
                         if start < i {
                             result.extend_from_slice(&bytes[start..i]);
                         }
-                        write_escape(&mut result, escape_byte, c);
+                        write_escape(result, escape_byte, c);
                         start = i + 1;
                     }
                     mask ^= 1 << cur;
@@ -640,9 +611,6 @@ pub unsafe fn escape_sse2<S: AsRef<str>>(input: S) -> String {
     if start < len {
         result.extend_from_slice(&bytes[start..]);
     }
-
-    result.push(b'"');
-    unsafe { String::from_utf8_unchecked(result) }
 }
 
 #[inline(always)]

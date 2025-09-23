@@ -22,21 +22,21 @@
 //!
 //! | Implementation        | Median time   | vs fastest |
 //! | --------------------- | ------------- | ---------- |
-//! | **`escape simd`**     | **345.06 µs** | **1.00×**  |
-//! | `escape v_jsonescape` | 576.25 µs     | 1.67×      |
-//! | `escape generic`      | 657.94 µs     | 1.91×      |
-//! | `serde_json`          | 766.72 µs     | 2.22×      |
-//! | `json-escape`         | 782.65 µs     | 2.27×      |
+//! | **`escape simd`**     | **341.18 µs** | **1.00×**  |
+//! | `escape v_jsonescape` | 555.47 µs     | 1.63×      |
+//! | `escape generic`      | 656.85 µs     | 1.93×      |
+//! | `serde_json`          | 744.75 µs     | 2.18×      |
+//! | `json-escape`         | 777.15 µs     | 2.28×      |
 //!
 //! **Fixtures payload (~300 iterations)**
 //!
 //! | Implementation        | Median time  | vs fastest |
 //! | --------------------- | ------------ | ---------- |
-//! | **`escape simd`**     | **12.84 ms** | **1.00×**  |
-//! | `escape v_jsonescape` | 19.66 ms     | 1.53×      |
-//! | `escape generic`      | 22.53 ms     | 1.75×      |
-//! | `serde_json`          | 24.65 ms     | 1.92×      |
-//! | `json-escape`         | 26.64 ms     | 2.07×      |
+//! | **`escape simd`**     | **12.67 ms** | **1.00×**  |
+//! | `escape v_jsonescape` | 20.58 ms     | 1.62×      |
+//! | `escape generic`      | 22.57 ms     | 1.78×      |
+//! | `serde_json`          | 24.52 ms     | 1.94×      |
+//! | `json-escape`         | 26.97 ms     | 2.13×      |
 //!
 //! ### GitHub Actions aarch64 (`ubuntu-24.04-arm`)
 //!
@@ -121,16 +121,25 @@ pub use generic::escape_generic;
 pub fn escape<S: AsRef<str>>(input: S) -> String {
     #[cfg(target_arch = "x86_64")]
     {
+        use generic::escape_inner;
+
+        let mut result = Vec::with_capacity(input.as_ref().len() + input.as_ref().len() / 2 + 2);
+        result.push(b'"');
+        let s = input.as_ref();
+        let bytes = s.as_bytes();
         // Runtime CPU feature detection for x86_64
         if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
-            unsafe { return x86::escape_avx512(input) }
+            unsafe { x86::escape_avx512(bytes, &mut result) }
         } else if is_x86_feature_detected!("avx2") {
-            unsafe { return x86::escape_avx2(input) }
+            unsafe { x86::escape_avx2(bytes, &mut result) }
         } else if is_x86_feature_detected!("sse2") {
-            unsafe { return x86::escape_sse2(input) }
+            unsafe { x86::escape_sse2(bytes, &mut result) }
         } else {
-            return escape_generic(input);
+            escape_inner(bytes, &mut result);
         }
+        result.push(b'"');
+        // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
+        unsafe { String::from_utf8_unchecked(result) }
     }
 
     #[cfg(target_arch = "aarch64")]
