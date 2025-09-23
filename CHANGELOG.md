@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.1...json-escape-simd-v1.0.2) - 2025-09-23
+
+### Other
+
+- code cleanup
+- cleanup codes
+
 ## [1.0.1](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.0...json-escape-simd-v1.0.1) - 2025-09-23
 
 ### Other
