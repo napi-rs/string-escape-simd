@@ -121,16 +121,25 @@ pub use generic::escape_generic;
 pub fn escape<S: AsRef<str>>(input: S) -> String {
     #[cfg(target_arch = "x86_64")]
     {
+        use generic::escape_inner;
+
+        let mut result = Vec::with_capacity(input.as_ref().len() + input.as_ref().len() / 2 + 2);
+        result.push(b'"');
+        let s = input.as_ref();
+        let bytes = s.as_bytes();
         // Runtime CPU feature detection for x86_64
         if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
-            unsafe { return x86::escape_avx512(input) }
+            unsafe { x86::escape_avx512(bytes, &mut result) }
         } else if is_x86_feature_detected!("avx2") {
-            unsafe { return x86::escape_avx2(input) }
+            unsafe { x86::escape_avx2(bytes, &mut result) }
         } else if is_x86_feature_detected!("sse2") {
-            unsafe { return x86::escape_sse2(input) }
+            unsafe { x86::escape_sse2(bytes, &mut result) }
         } else {
-            return escape_generic(input);
+            escape_inner(bytes, &mut result);
         }
+        result.push(b'"');
+        // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
+        unsafe { String::from_utf8_unchecked(result) }
     }
 
     #[cfg(target_arch = "aarch64")]
