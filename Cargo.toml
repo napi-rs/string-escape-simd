@@ -13,7 +13,7 @@ name = "escape"
 path = "examples/escape.rs"
 
 [features]
-force_aarch64_generic = [] # Force use of generic implementation on aarch64
+force_aarch64_neon = [] # Force use of neon implementation on aarch64
 
 [[bench]]
 name = "escape"

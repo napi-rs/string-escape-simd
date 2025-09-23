@@ -10,7 +10,7 @@ Optimized SIMD routines for escaping JSON strings. This repository contains the 
 
 > [!NOTE]
 >
-> The `force_aarch64_generic` feature flag can be used to force use of the generic fallback on aarch64. This is useful for testing the generic fallback on aarch64 devices with smaller register numbers.
+> The `force_aarch64_neon` feature flag can be used to force use of the neon implementation on aarch64. This is useful for the benchmark.
 
 ## Benchmarks
 
