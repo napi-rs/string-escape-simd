@@ -229,7 +229,7 @@ pub unsafe fn escape_avx512(bytes: &[u8], result: &mut Vec<u8>) {
         }
     } else {
         // Fall back to AVX2 for small strings
-        return escape_avx2(bytes, result);
+        return escape_avx2(&bytes[start..], result);
     }
 
     // Copy any remaining bytes
@@ -458,7 +458,7 @@ pub unsafe fn escape_avx2(bytes: &[u8], result: &mut Vec<u8>) {
         }
     } else {
         // Fall back to SSE2 for small strings
-        return escape_sse2(bytes, result);
+        return escape_sse2(&bytes[start..], result);
     }
 
     // Copy any remaining bytes
