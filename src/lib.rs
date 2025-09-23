@@ -127,12 +127,19 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
         result.push(b'"');
         let s = input.as_ref();
         let bytes = s.as_bytes();
+        let len = bytes.len();
         // Runtime CPU feature detection for x86_64
-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
+        if is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && len >= x86::LOOP_SIZE_AVX512
+        {
             unsafe { x86::escape_avx512(bytes, &mut result) }
-        } else if is_x86_feature_detected!("avx2") {
+        } else if is_x86_feature_detected!("avx2") && len >= x86::LOOP_SIZE_AVX2 {
             unsafe { x86::escape_avx2(bytes, &mut result) }
-        } else if is_x86_feature_detected!("sse2") {
+        } else if is_x86_feature_detected!("sse2")
+            && /* if len < 128, no need to use simd */
+            len >= x86::LOOP_SIZE_AVX2
+        {
             unsafe { x86::escape_sse2(bytes, &mut result) }
         } else {
             escape_inner(bytes, &mut result);
