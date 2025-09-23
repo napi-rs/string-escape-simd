@@ -108,11 +108,13 @@
 //! | `escape v_jsonescape` | 21.09 ms     | 1.18×      |
 //! | `json-escape`         | 22.43 ms     | 1.25×      |
 
+#[cfg(target_arch = "aarch64")]
+mod aarch64;
+mod generic;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
+pub use generic::escape_generic;
 
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
@@ -169,67 +171,6 @@ pub(crate) const HEX_BYTES: [(u8, u8); 256] = {
     }
     bytes
 };
-
-#[inline]
-/// Cross platform generic implementation without any platform specific instructions
-pub fn escape_generic<S: AsRef<str>>(input: S) -> String {
-    let s = input.as_ref();
-    let bytes = s.as_bytes();
-
-    // Estimate capacity - most strings don't need much escaping
-    // Add some padding for potential escapes
-    let estimated_capacity = bytes.len() + bytes.len() / 2 + 2;
-    let mut result = Vec::with_capacity(estimated_capacity);
-
-    result.push(b'"');
-
-    let mut start = 0;
-    let mut i = 0;
-
-    while i < bytes.len() {
-        let b = bytes[i];
-
-        // Use lookup table to check if escaping is needed
-        let escape_byte = ESCAPE[b as usize];
-
-        if escape_byte == 0 {
-            // No escape needed, continue scanning
-            i += 1;
-            continue;
-        }
-
-        // Copy any unescaped bytes before this position
-        if start < i {
-            result.extend_from_slice(&bytes[start..i]);
-        }
-
-        // Handle the escape
-        result.push(b'\\');
-        if escape_byte == UU {
-            // Unicode escape for control characters
-            result.extend_from_slice(b"u00");
-            let hex_digits = &HEX_BYTES[b as usize];
-            result.push(hex_digits.0);
-            result.push(hex_digits.1);
-        } else {
-            // Simple escape
-            result.push(escape_byte);
-        }
-
-        i += 1;
-        start = i;
-    }
-
-    // Copy any remaining unescaped bytes
-    if start < bytes.len() {
-        result.extend_from_slice(&bytes[start..]);
-    }
-
-    result.push(b'"');
-
-    // SAFETY: We only pushed valid UTF-8 bytes (original string bytes and ASCII escape sequences)
-    unsafe { String::from_utf8_unchecked(result) }
-}
 
 /// Main entry point for JSON string escaping with SIMD acceleration
 /// If the platform is supported, the SIMD path will be used. Otherwise, the generic fallback will be used.
