@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.3...json-escape-simd-v1.0.4) - 2025-09-23
+
+### Other
+
+- reduce alignment overhead for small inputs ([#16](https://github.com/napi-rs/json-escape-simd/pull/16))
+
 ## [1.0.3](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.2...json-escape-simd-v1.0.3) - 2025-09-23
 
 ### Other
