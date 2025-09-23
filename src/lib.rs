@@ -150,13 +150,23 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
 
     #[cfg(target_arch = "aarch64")]
     {
+        use std::arch::is_aarch64_feature_detected;
+
         #[cfg(feature = "force_aarch64_generic")]
         {
             return escape_generic(input);
         }
         #[cfg(not(feature = "force_aarch64_generic"))]
         {
-            return aarch64::escape_neon(input);
+            // on Apple M2 and later, the `bf16` feature is available
+            // it means they have more registers and can significantly benefit from the SIMD path
+            // TODO: add support for sve2 chips with wider registers
+            // github actions ubuntu-24.04-arm runner has 128 bits sve2 registers, it's not enough for the SIMD path
+            if cfg!(target_os = "macos") && is_aarch64_feature_detected!("bf16") {
+                return aarch64::escape_neon(input);
+            } else {
+                return escape_generic(input);
+            }
         }
     }
 
