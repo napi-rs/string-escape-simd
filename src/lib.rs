@@ -70,7 +70,7 @@ macro_rules! tri {
 }
 
 #[inline]
-pub fn encode_str_fallback<S: AsRef<str>>(input: S) -> String {
+pub fn escape_generic<S: AsRef<str>>(input: S) -> String {
     let s = input.as_ref();
     let bytes = s.as_bytes();
 
@@ -145,7 +145,7 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
     }
 
     // Fallback to optimized scalar implementation
-    encode_str_fallback(input)
+    escape_generic(input)
 }
 
 #[test]

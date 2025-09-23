@@ -31,7 +31,7 @@ jobs:
       - name: print cpu features
         run: |
           rustup toolchain install nightly
-          cargo +nightly run --example cpu_features
+          cargo +nightly run -p cpu-features --features nightly
       - name: Run benchmarks
         run: cargo test
 
