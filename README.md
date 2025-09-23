@@ -64,9 +64,31 @@ Neon enabled.
 | `escape simd`         | 21.04 ms     | 1.18×      |
 | `escape v_jsonescape` | 25.57 ms     | 1.44×      |
 
+### GitHub Actions macOS (`macos-latest`)
+
+> Apple M1 chip
+
+**RxJS payload (~10k iterations)**
+
+| Implementation        | Median time   | vs fastest |
+| --------------------- | ------------- | ---------- |
+| **`escape generic`**  | **759.07 µs** | **1.00×**  |
+| `escape simd`         | 764.98 µs     | 1.01×      |
+| `serde_json`          | 793.91 µs     | 1.05×      |
+| `json-escape`         | 868.21 µs     | 1.14×      |
+| `escape v_jsonescape` | 926.00 µs     | 1.22×      |
+
+**Fixtures payload (~300 iterations)**
+
+| Implementation        | Median time  | vs fastest |
+| --------------------- | ------------ | ---------- |
+| **`serde_json`**      | **26.41 ms** | **1.00×**  |
+| `escape generic`      | 26.43 ms     | 1.00×      |
+| `escape simd`         | 26.42 ms     | 1.00×      |
+| `json-escape`         | 28.94 ms     | 1.10×      |
+| `escape v_jsonescape` | 29.22 ms     | 1.11×      |
+
 ### Apple M3 Max
-
-
 
 **RxJS payload (~10k iterations)**
 
