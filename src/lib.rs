@@ -119,6 +119,7 @@ pub use generic::{escape_generic, escape_into_generic};
 /// Main entry point for JSON string escaping with SIMD acceleration
 /// If the platform is supported, the SIMD path will be used. Otherwise, the generic fallback will be used.
 pub fn escape<S: AsRef<str>>(input: S) -> String {
+    #[cfg(not(feature = "force_aarch64_neon"))]
     use generic::escape_inner;
 
     let mut result = Vec::with_capacity(input.as_ref().len() + input.as_ref().len() / 2 + 2);
@@ -178,6 +179,7 @@ pub fn escape<S: AsRef<str>>(input: S) -> String {
 /// Main entry point for JSON string escaping with SIMD acceleration
 /// If the platform is supported, the SIMD path will be used. Otherwise, the generic fallback will be used.
 pub fn escape_into<S: AsRef<str>>(input: S, output: &mut Vec<u8>) {
+    #[cfg(not(feature = "force_aarch64_neon"))]
     use generic::escape_inner;
 
     output.push(b'"');
@@ -208,7 +210,7 @@ pub fn escape_into<S: AsRef<str>>(input: S, output: &mut Vec<u8>) {
     {
         #[cfg(feature = "force_aarch64_neon")]
         {
-            return aarch64::escape_neon(bytes, output);
+            aarch64::escape_neon(bytes, output);
         }
         #[cfg(not(feature = "force_aarch64_neon"))]
         {
