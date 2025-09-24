@@ -18,6 +18,7 @@ path = "examples/escape.rs"
 
 [features]
 force_aarch64_neon = [] # Force use of neon implementation on aarch64
+codspeed = []
 
 [[bench]]
 name = "escape"
