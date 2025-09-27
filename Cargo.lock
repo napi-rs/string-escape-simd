@@ -324,16 +324,16 @@ dependencies = [
 
 [[package]]
 name = "json-escape"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3100a96840f2d70dd1c336ec5f76f160edfd56d8e9de2a949d440c0805459cce"
+checksum = "8c553d5b49fa2e0b7448891376e80e1a854028ee7939a2e683ac4eab3de7ec7a"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "json-escape-simd"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "anyhow",
  "codspeed-criterion-compat",
