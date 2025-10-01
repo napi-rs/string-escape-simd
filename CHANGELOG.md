@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.1.0...json-escape-simd-v1.1.1) - 2025-10-01
+
+### Other
+
+- *(deps)* update rust crate json-escape to 0.3.0 ([#24](https://github.com/napi-rs/json-escape-simd/pull/24))
+- *(deps)* update rust crate json-escape to 0.2.0 ([#23](https://github.com/napi-rs/json-escape-simd/pull/23))
+- omit other crates in codspeed ([#22](https://github.com/napi-rs/json-escape-simd/pull/22))
+- add benchmark ([#20](https://github.com/napi-rs/json-escape-simd/pull/20))
+
 ## [1.1.0](https://github.com/napi-rs/json-escape-simd/compare/json-escape-simd-v1.0.4...json-escape-simd-v1.1.0) - 2025-09-23
 
 ### Added
