@@ -28,7 +28,7 @@ harness = false
 anyhow = "1"
 
 [dev-dependencies]
-criterion = { version = "3.0.5", package = "codspeed-criterion-compat" }
+criterion = { version = "4.0.0", package = "codspeed-criterion-compat" }
 glob = "0.3"
 serde_json = "1"
 v_jsonescape = "0.7"
